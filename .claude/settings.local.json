@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"\\\\\\\\rasp\\\\haussteuerung\")",
+      "Bash(dir c:)",
+      "Read(//c/rasp/**)",
+      "Read(//rasp/haussteuerung\" 2>/dev/**)"
+    ]
+  }
+}

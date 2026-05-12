@@ -1,0 +1,187 @@
+#!/bin/python
+
+import time
+
+from pymodbus.client.sync import ModbusTcpClient
+
+def connectMod():
+    client = ModbusTcpClient('192.168.2.100', port=502)
+    if client.connect():
+        return client
+    else: 
+        return '0'
+         
+def disconnectMod(client):
+    client.close()
+
+def readRegister(client):
+    ret = client.read_coils(12336, count=34, unit=1).bits
+    return ret
+
+def createList():
+    return [False]*63
+
+def createDig(regist):
+    start = 12336
+    dic = {
+         'EsszimmerGross': [regist[12343-start], 22, -1, -1, 'Kronleuchter', 12343-start]
+        ,'EsszimmerWand': [regist[12366-start], 23, -1, -1, 'Esszimmer Wandlicht', 12366-start]
+        ,'EsszimmerBalken': [regist[12364-start], 24, -1, -1, 'Esszimmer Balkenlicht', 12364-start]
+        ,'BalkonSteckdose': [regist[12368-start], 25, -1, -1, 'Balkonsteckdose', 12368-start]
+        ,'BalkonLicht': [regist[12369-start], 26, -1, -1, 'Balkonlicht', 12369-start]
+        ,'Speis': [regist[12354-start], 27, -1, -1, 'Speise', 12354-start]
+        ,'KücheBoden': [regist[12357-start], 28, -1, -1, 'Bodenlichter', 12357-start]
+        ,'KücheGang': [regist[12355-start], 29, -1, -1, 'Küche Gang', 12355-start]
+        ,'Küche': [regist[12353-start], 30, 8, 9, 'Küche', 12353-start]
+        ,'KücheSchrank': [regist[12352-start], 31, -1, -1, 'Küche Schranklicht', 12352-start]
+        ,'Kind1': [regist[12358-start], 32, 14, 15, 'Kind 1', 12358-start]
+        ,'Kind2':[regist[12360-start], 33, 16, 17, 'Kind 2', 12360-start]
+        ,'BadOG': [regist[12359-start], 34, 12, 13, 'Gästebad', 12359-start]
+        ,'FlurOG': [regist[12350-start], 35, -1, -1, 'Flur unten', 12350-start]
+        ,'Wohnzimmer': [regist[12361-start], 36, 10, 11, 'Wohnzimmer', 12361-start]
+        ,'WohnzimmerVorne': [regist[12363-start], 37, -1, -1, 'Wohnzimmer vorne', 12363-start]
+        ,'WohnzimmerWand': [regist[12362-start], 38, -1, -1, 'Wohnzimmer Wandlichter', 12362-start]
+        ,'Ankleide': [regist[12340-start], 39, -1, -1, 'Ankleide', 12340-start]
+        ,'Schlafzimmer': [regist[12339-start], 40, 20, 21, 'Schlafzimmer', 12339-start]
+        ,'SchlafzimmerWand': [regist[12338-start], 41, -1, -1, 'Schglafzimmer Wand', 12338-start]
+        ,'BadDG': [regist[12336-start], 42, 18, 19, 'Elternbad', 12336-start]
+        ,'Dusche': [regist[12337-start], 43, -1, -1, 'Duschlicht', 12337-start]
+        ,'Hobbyraum': [regist[12345-start], 44, -1, -1, 'Hobbyraum', 12345-start]
+        ,'HobbyraumNiesche': [regist[12346-start], 45, -1, -1, 'Hobbyraum Niesche', 12346-start]
+        ,'FlurOben': [regist[12342-start], 46, -1, -1, 'Flur oben', 12342-start]
+        ,'Galerie': [regist[12344-start], 47, -1, -1, 'Galerie', 12344-start]
+        ,'Bildlicht': [regist[12341-start], 48, -1, -1, 'Bildlicht', 12341-start]
+        ,'FFoben': [False, -1, 0, 1, 'Fensterfront oben', -1]
+        ,'FFlinks': [False, -1, 2, 3, 'Fensterfront links', -1]
+        ,'FFrechts': [False, -1, 4, 5, 'Fensterfront rechts', -1]
+        ,'FFmitte': [False, -1, 6, 7, 'Fensterfront mitte', -1]
+        }
+    return dic
+        
+def handle(dig, ltyp, val, out):
+    
+    for typ in ltyp:
+        ##print(typ)
+        if (val == 'true') and dig[typ][1] != -1:
+            out[dig[typ][1]] = True
+        if (val == 'ein') and dig[typ][1] != -1 and dig[typ][0] == False:
+            ## ein/and
+            out[dig[typ][1]] = True
+            ##ret = (dig[typ][4] + ' ist an!')
+            print(dig[typ][4] + ' eingeschalten')
+        elif (val == 'aus') and dig[typ][1] != -1 and dig[typ][0] == True:
+            ## aus
+            out[dig[typ][1]] = True
+            ##ret = (dig[typ][4] + ' ist aus!')
+            print(dig[typ][4] + ' ausgeschalten')
+        elif (val == 'auf') and dig[typ][2] != -1:
+            ## hoch/auf*
+            out[dig[typ][2]] = True
+            ##ret = (dig[typ][4] + ' fährt hoch')
+            print(dig[typ][4] + ' hochgefahren')
+        elif (val == 'zu') and dig[typ][3] != -1:
+            ## runter/zu
+            out[dig[typ][3]] = True
+            ##ret = (dig[typ][4] + ' fährt runter')
+            print(dig[typ][4] + ' runtergefahren')
+        
+    return out
+
+def write(client,out):
+    client.write_coils(12816, out)
+    time.sleep(0.11)
+    client.write_coils(12816, [False]*64)
+        
+def fensterfront(dig, val, out):
+    if (val not in ['auf','zu']):
+        return('falsche Syntax')
+    
+    ltyp = ['FFoben','FFlinks','FFmitte','FFrechts']
+      
+    out = handle(dig, ltyp, val, out)
+    
+    return out
+
+def alles(dig, val, out):
+    if (val not in ['aus','auf','zu']):
+        return('falsche Syntax')
+    
+    out = allesUnten(dig, val, out)
+    out = allesOben(dig, val, out)
+ 
+    return out
+
+def allesUnten(dig, val, out):
+    if (val not in ['aus','auf','zu']):
+        return('falsche Syntax')
+    
+    ltyp = ['EsszimmerGross','EsszimmerBalken','EsszimmerWand','BalkonSteckdose','BalkonLicht',
+            'Speis','KücheBoden','KücheGang','Küche','KücheSchrank','Kind1','Kind2','BadOG','FlurOG',
+            'Wohnzimmer','WohnzimmerVorne','WohnzimmerWand','FFoben','FFlinks','FFmitte','FFrechts']
+    out = handle(dig, ltyp, val, out)
+    
+    return out
+
+def allesOben(dig, val, out):
+    if (val not in ['aus','auf','zu']):
+        return('falsche Syntax')
+    
+    ltyp = ['Ankleide','SchlafzimmerWand','Schlafzimmer','BadDG','Hobbyraum','HobbyraumNiesche',
+            'FlurOben','Galerie','Bildlicht','Dusche','FFoben','FFlinks','FFrechts','FFmitte']
+    out = handle(dig, ltyp, val, out)
+    
+    return out
+
+def sofa(dig, out):
+    
+    out = allesUnten(dig, 'aus', out)
+    out = handle(dig, ['WohnzimmerWand'], 'ein', out)
+    return out
+    
+def dunkel(dig, out):
+    
+    ltyp = ['FFoben','FFlinks','FFmitte','FFrechts','Küche']
+    out = handle(dig, ltyp, 'zu', out)
+    return out
+    
+def hoch(dig, out):
+    
+    ltyp = ['FFoben','FFlinks','FFmitte','FFrechts']
+    out = handle(dig, ltyp, 'auf', out)
+    out = allesUnten(dig, 'aus', out)
+    return out
+
+def hell(dig, out):
+    
+    ltyp = ['FFoben','FFlinks','FFmitte','FFrechts','Küche']
+    out = handle(dig, ltyp, 'auf', out)
+    return out
+
+def weg(dig, out):
+    out = alles(dig, 'aus', out)
+    return out
+     
+'''
+xoutFL_2  AT %MX3.11: BOOL;  (*12347*)		(*Flur DG Bewegungsmelder*)
+xoutEZ_STD  AT %MX3.12: BOOL;  (*12348*) 	(*Steckdose EZ*)
+xoutTRE  AT %MX3.13: BOOL;  (*12349*) 		(*Treppe*)
+xoutDIE_2  AT %MX3.15: BOOL;  (*12351*) 	(*Flur OG Bewegungsmelder*)
+xoutSP_3  AT %MX4.4: BOOL;  (*12356*) 		(*??*)
+xoutEZWZ_2  AT %MX4.13: BOOL;  (*12365*) 	(*Esszimmer Steckdose Sofa*)
+xoutFF3  AT %MX4.15: BOOL;  (*12367*) 		(*Esszimmer Steckdose*)
+xoutWZ_4 AT %MX5.2: BOOL;  (*12370*) 		(**)
+'''
+
+'''
+client = connectMod()
+print(client)
+reg = readRegister(client)
+dig = createDig(reg)
+out = createList()
+val = 'aus'
+##ret = alles(client, dig, val)
+out = allesOben(dig, val, out)
+write(out)
+##print(out)
+disconnectMod(client)
+'''

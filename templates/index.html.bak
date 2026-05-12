@@ -1,0 +1,218 @@
+﻿<!doctype html>
+<html>
+
+<head>
+    <title>HomeConnect</title>
+    <link rel="stylesheet" type="text/css" href="../static/style.css">
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+    <script src="../static/java.js"></script>
+    <script src="../static/modbus.js"></script>
+    <style>
+        .config-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 20px;
+            margin: 10px 0;
+            background: #f9f9f9;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+        }
+        .config-item p { margin: 4px 0 0 0; color: #888; font-size: 0.9em; }
+        .toggle { position: relative; display: inline-block; width: 56px; height: 30px; flex-shrink: 0; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc; border-radius: 30px;
+            transition: .3s;
+        }
+        .slider:before {
+            position: absolute; content: "";
+            height: 22px; width: 22px; left: 4px; bottom: 4px;
+            background-color: white; border-radius: 50%; transition: .3s;
+        }
+        input:checked + .slider { background-color: #4CAF50; }
+        input:checked + .slider:before { transform: translateX(26px); }
+    </style>
+    <script type=text/javascript>$SCRIPT_ROOT = {{ request.script_root | tojson }};</script>
+    <script>
+        function ladeConfig() {
+            fetch('/api/config')
+                .then(r => r.json())
+                .then(cfg => {
+                    document.getElementById('toggle-extremeHot').checked = cfg.extremeHot;
+                    document.getElementById('toggle-christmas').checked = cfg.christmas;
+                    document.getElementById('toggle-SchlafRollo').checked = cfg.SchlafRollo;
+                });
+        }
+        function setConfig(key, value) {
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({key: key, value: value})
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    var s = document.getElementById('config-status');
+                    s.style.display = 'block';
+                    setTimeout(() => s.style.display = 'none', 2000);
+                }
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <nav class="slidemenu">
+
+        <!-- Item 1 -->
+        <input type="radio" name="slideItem" id="slide-item-1" class="slide-toggle" onclick="openTab(event, 'smarthome')" checked />
+        <label for="slide-item-1"><p class="icon">♬</p><span>Smart Home</span></label>
+
+        <!-- Item 2 -->
+        <input type="radio" name="slideItem" id="slide-item-2" class="slide-toggle" onclick="openTab(event, 'kalender')" />
+        <label for="slide-item-2"><p class="icon">★</p><span>Kalender</span></label>
+
+        <!-- Item 3 -->
+        <input type="radio" name="slideItem" id="slide-item-3" class="slide-toggle" onclick="openTab(event, 'solar')" />
+        <label for="slide-item-3"><p class="icon">✈</p><span>Photovoltaik</span></label>
+
+        <!-- Item 4 -->
+        <input type="radio" name="slideItem" id="slide-item-4" class="slide-toggle" onclick="openTab(event, 'wetter')" />
+        <label for="slide-item-4"><p class="icon">✎</p><span>Wetter</span></label>
+
+        <!-- Item 5 -->
+        <input type="radio" name="slideItem" id="slide-item-5" class="slide-toggle" onclick="openTab(event, 'boerse')" />
+        <label for="slide-item-5"><p class="icon">✎</p><span>Börse</span></label>
+
+        <!-- Item 6 -->
+        <input type="radio" name="slideItem" id="slide-item-6" class="slide-toggle" onclick="openTab(event, 'einstellungen'); ladeConfig();" />
+        <label for="slide-item-6"><p class="icon">⚙</p><span>Einstellungen</span></label>
+
+        <div class="clear"></div>
+
+        <!-- Bar -->
+        <div class="slider">
+            <div class="bar"></div>
+        </div>
+    </nav>
+
+    <div id="smarthome" class="tabcontent">
+        <img src="/static/images/LayoutOG.png" id="floor" alt="Grundriss"/>
+        <div id="wrapper">
+            <img src="/static/images/birne.png" data-typ="EsszimmerGross" data-val="true" class="cbutton licht DG OG" alt="EsszimmerGross" />
+            <img src="/static/images/birne.png" data-typ="EsszimmerWand" data-val="true" class="cbutton licht DG OG" alt="EsszimmerWand" />
+            <img src="/static/images/birne.png" data-typ="EsszimmerBalken" data-val="true" class="cbutton licht DG OG" alt="EsszimmerBalken" />
+            <img src="/static/images/steckdose.png" data-typ="BalkonSteckdose" data-val="true" class="cbutton steckdose DG OG" alt="BalkonSteckdose" />
+            <img src="/static/images/birne.png" data-typ="BalkonLicht" data-val="true" class="cbutton licht DG OG" alt="BalkonLicht" />
+            <img src="/static/images/birne.png" data-typ="Speis" data-val="true" class="cbutton licht OG" alt="Speis" />
+            <img src="/static/images/birne.png" data-typ="KuecheBoden" data-val="true" class="cbutton licht OG" alt="KücheBoden" />
+            <img src="/static/images/birne.png" data-typ="KuecheGang" data-val="true" class="cbutton licht OG" alt="KücheGang" />
+            <img src="/static/images/birne.png" data-typ="Kueche" data-val="true" class="cbutton licht OG" alt="Küche" />
+            <img src="/static/images/pfeilAuf.png" data-typ="KuecheAuf" data-val="auf" class="cbutton jal OG" alt="Küche" />
+            <img src="/static/images/pfeilAb.png" data-typ="KuecheZu" data-val="zu" class="cbutton jal OG" alt="Küche" />
+            <img src="/static/images/birne.png" data-typ="KuecheSchrank" data-val="true" class="cbutton licht OG" alt="KücheSchrank" />
+            <img src="/static/images/birne.png" data-typ="Kind1" data-val="true" class="cbutton licht OG" alt="Kind1" />
+            <img src="/static/images/pfeilAuf.png" data-typ="Kind1Auf" data-val="auf" class="cbutton jal OG" alt="Kind1" />
+            <img src="/static/images/pfeilAb.png" data-typ="Kind1Zu" data-val="zu" class="cbutton jal OG" alt="Kind1" />
+            <img src="/static/images/birne.png" data-typ="Kind2" data-val="true" class="cbutton licht OG" alt="Kind2" />
+            <img src="/static/images/pfeilAuf.png" data-typ="Kind2Auf" data-val="auf" class="cbutton jal OG" alt="Kind2" />
+            <img src="/static/images/pfeilAb.png" data-typ="Kind2Zu" data-val="zu" class="cbutton jal OG" alt="Kind2" />
+            <img src="/static/images/birne.png" data-typ="BadOG" data-val="true" class="cbutton licht OG" alt="BadOG" />
+            <img src="/static/images/pfeilAuf.png" data-typ="BadOGAuf" data-val="auf" class="cbutton jal OG" alt="BadOG" />
+            <img src="/static/images/pfeilAb.png" data-typ="BadOGZu" data-val="zu" class="cbutton jal OG" alt="BadOG" />
+            <img src="/static/images/birne.png" data-typ="FlurOG" data-val="true" class="cbutton licht OG" alt="FlurOG" />
+            <img src="/static/images/birne.png" data-typ="Wohnzimmer" data-val="true" class="cbutton licht OG" alt="Wohnzimmer" />
+            <img src="/static/images/pfeilAuf.png" data-typ="WohnzimmerAuf" data-val="auf" class="cbutton jal OG" alt="Wohnzimmer" />
+            <img src="/static/images/pfeilAb.png" data-typ="WohnzimmerZu" data-val="zu" class="cbutton jal OG" alt="Wohnzimmer" />
+            <img src="/static/images/birne.png" data-typ="WohnzimmerVorne" data-val="true" class="cbutton licht OG" alt="WohnzimmerVorne" />
+            <img src="/static/images/birne.png" data-typ="WohnzimmerWand" data-val="true" class="cbutton licht OG" alt="WohnzimmerWand" />
+            <img src="/static/images/birne.png" data-typ="Ankleide" data-val="true" class="cbutton licht DG" alt="Ankleide" />
+            <img src="/static/images/birne.png" data-typ="Schlafzimmer" data-val="true" class="cbutton licht DG" alt="Schlafzimmer" />
+            <img src="/static/images/pfeilAuf.png" data-typ="SchlafzimmerAuf" data-val="auf" class="cbutton jal DG" alt="Schlafzimmer" />
+            <img src="/static/images/pfeilAb.png" data-typ="SchlafzimmerZu" data-val="zu" class="cbutton jal DG" alt="Schlafzimmer" />
+            <img src="/static/images/birne.png" data-typ="SchlafzimmerWand" data-val="true" class="cbutton licht DG" alt="SchlafzimmerWand" />
+            <img src="/static/images/birne.png" data-typ="BadDG" data-val="true" class="cbutton licht DG" alt="BadDG" />
+            <img src="/static/images/pfeilAuf.png" data-typ="BadDGAuf" data-val="auf" class="cbutton jal DG" alt="BadDG" />
+            <img src="/static/images/pfeilAb.png" data-typ="BadDGZu" data-val="zu" class="cbutton jal DG" alt="BadDG" />
+            <img src="/static/images/birne.png" data-typ="Dusche" data-val="true" class="cbutton licht DG" alt="Dusche" />
+            <img src="/static/images/birne.png" data-typ="Hobbyraum" data-val="true" class="cbutton licht DG" alt="Hobbyraum" />
+            <img src="/static/images/birne.png" data-typ="HobbyraumNiesche" data-val="true" class="cbutton licht DG" alt="HobbyraumNiesche" />
+            <img src="/static/images/birne.png" data-typ="FlurOben" data-val="true" class="cbutton licht DG" alt="FlurOben" />
+            <img src="/static/images/birne.png" data-typ="Galerie" data-val="true" class="cbutton licht DG" alt="Galerie" />
+            <img src="/static/images/pfeilAuf.png" data-typ="FFobenAuf" data-val="auf" class="cbutton jal DG OG" alt="FFobenAuf" />
+            <img src="/static/images/pfeilAb.png" data-typ="FFobenZu" data-val="zu" class="cbutton jal DG OG" alt="FFobenZu" />
+            <img src="/static/images/pfeilAuf.png" data-typ="FFlinksAuf" data-val="auf" class="cbutton jal DG OG" alt="FFlinks" />
+            <img src="/static/images/pfeilAb.png" data-typ="FFlinksZu" data-val="zu" class="cbutton jal DG OG" alt="FFlinks" />
+            <img src="/static/images/pfeilAuf.png" data-typ="FFrechtsAuf" data-val="auf" class="cbutton jal DG OG" alt="FFrechts" />
+            <img src="/static/images/pfeilAb.png" data-typ="FFrechtsZu" data-val="zu" class="cbutton jal DG OG" alt="FFrechts" />
+            <img src="/static/images/pfeilAuf.png" data-typ="FFmitteAuf" data-val="auf" class="cbutton jal DG OG" alt="FFmitte" />
+            <img src="/static/images/pfeilAb.png" data-typ="FFmitteZu" data-val="zu" class="cbutton jal DG OG" alt="FFmitte" />
+            <button id="stairs" onclick="changeFloor()" />
+            <!--<img src="/static/images/birne.png" data-typ="Bildlicht" data-val="true" class="cbutton licht DG" alt="Bildlicht" /> -->
+        </div>
+    </div>
+
+    <div id="kalender" class="tabcontent">
+        <iframe src="https://calendar.google.com/calendar/embed?height=600&wkst=2&bgcolor=%23ffffff&ctz=Europe%2FBerlin&mode=WEEK&showPrint=0&showCalendars=1&showTz=0&showTitle=0&src=ZmszOWpvbHQzN3BlbXBxZzBrbG05ZHZsMmtAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ&src=ZGUuZ2VybWFuI2hvbGlkYXlAZ3JvdXAudi5jYWxlbmRhci5nb29nbGUuY29t&src=N2FzaGgycnVxaDNmMDlpOHRsbzl1MzNvOThAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ&src=Y2hyaXN0aWFuLmJlZXpAZ29vZ2xlbWFpbC5jb20&color=%23F4511E&color=%23616161&color=%23009688&color=%233F51B5" style="overflow:hidden;height:100%;width:100%" height="100%" width="100%" scrolling="no"></iframe>
+    </div>
+
+    <div id="solar" class="tabcontent">
+        <h3>Photovoltaik</h3>
+    </div>
+
+    <div id="wetter" class="tabcontent">
+        <h3>Wetter</h3>
+    </div>
+
+    <div id="boerse" class="tabcontent">
+        <h3>Börse</h3>
+    </div>
+
+    <div id="einstellungen" class="tabcontent">
+        <h3>Automatik-Einstellungen</h3>
+        <p style="color:#888; margin-bottom:24px;">Diese Flags steuern das Verhalten der automatischen Rollosteuerung (daytime.py). Änderungen wirken sofort.</p>
+
+        <div class="config-item">
+            <div>
+                <strong>🌡️ Extreme Hitze</strong>
+                <p>Wenn aktiviert, fahren die Rollos bei Sonnenaufgang <em>nicht</em> automatisch hoch.<br>
+                So bleiben die Räume durch geschlossene Rollos kühler – ideal für sehr heiße Sommertage.</p>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="toggle-extremeHot" onchange="setConfig('extremeHot', this.checked)">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="config-item">
+            <div>
+                <strong>🎄 Weihnachten</strong>
+                <p>Wenn aktiviert, schaltet die Balkonsteckdose (Lichterkette) automatisch ein,<br>
+                sobald es dunkel wird – und wieder aus um 22:00 Uhr.</p>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="toggle-christmas" onchange="setConfig('christmas', this.checked)">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="config-item">
+            <div>
+                <strong>🛏️ Schlafzimmer-Rollo</strong>
+                <p>Wenn aktiviert, fährt der Schlafzimmer-Rollo automatisch herunter –<br>
+                genau eine Stunde vor Sonnenaufgang. So schläft man länger ohne Lichteinfall.</p>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="toggle-SchlafRollo" onchange="setConfig('SchlafRollo', this.checked)">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <p id="config-status" style="margin-top:20px; color:green; display:none;">✓ Gespeichert</p>
+    </div>
+
+
+</body>
+
+    </html>

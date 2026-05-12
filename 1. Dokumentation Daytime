@@ -1,0 +1,12 @@
+Skript ausführbar gemacht:
+    chmod +x daytime.py
+
+im hintergrund zum Laufen gebracht:
+    nohup python3 ./daytime.py &
+
+skript beenden mit folgender methodik:
+    1. ID herausfinden_
+        pgrep -f daytime
+    2. ID kill mit der Zahl oder über Namen:
+        kill <Zahl des vorherigen Befehls>
+        pkill -f daytime

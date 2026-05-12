@@ -1,0 +1,27 @@
+{
+    "SchlafRollo": false,
+    "christmas": false,
+    "extremeHot": false,
+    "smaTripower":       null,
+    "smaSunnyIsland":    "192.168.2.116",
+    "smaSerial":         null,
+    "sunnyportalUser":   "christian.beez@googlemail.com",
+    "sunnyportalPass":   "Distrust-Secluding-Tarmac9",
+    "kalender_ics": [
+        {
+            "name": "Christian",
+            "color": "#3F51B5",
+            "url": "https://calendar.google.com/calendar/ical/christian.beez%40googlemail.com/private-8162d2e86eaac32ca787ec7b778029f4/basic.ics"
+        },
+        {
+            "name": "Christian & Corina",
+            "color": "#F4511E",
+            "url": "https://calendar.google.com/calendar/ical/fk39jolt37pempqg0klm9dvl2k%40group.calendar.google.com/private-d3268a6e42aad0691b38136e0e4847d9/basic.ics"
+        },
+        {
+            "name": "Feiertage Bayern",
+            "color": "#757575",
+            "url": "https://calendar.google.com/calendar/ical/de.bavarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
+        }
+    ]
+}

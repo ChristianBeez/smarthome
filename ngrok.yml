@@ -1,0 +1,17 @@
+version: "2"
+authtoken: 23GbnsUM3bEul9L5IU6rLD7iuKc_71B92V1wiU1yeLxJ6fGUg
+web_addr: 0.0.0.0:4040
+
+tunnels:
+  smarthome:
+    proto: http
+    addr: 5000
+    domain: maudie-untrashed-wrinkledly.ngrok-free.dev   # <-- hier deine statische Domain eintragen
+
+  website:
+    proto: http
+    addr: 5001
+    oauth:
+      provider: google
+      allow_emails:
+        - christian.beez@googlemail.com                            # <-- hier deine Gmail-Adresse eintragen

@@ -1,0 +1,147 @@
+body {
+    background-color: black;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+}
+
+.clear {
+    clear: both;
+}
+
+
+.slide-toggle {
+    display: none;
+}
+
+.slidemenu {
+    font-family: arial, sans-serif;
+    width: 100%;
+    margin: 4px auto;
+    overflow: hidden;
+}
+
+    .slidemenu label {
+        width: 20%;
+        text-align: center;
+        display: block;
+        float: left;
+        color: #ffffff;
+        opacity: 0.5;
+    }
+
+        .slidemenu label:hover {
+            cursor: pointer;
+            color: #ffffff;
+        }
+
+        .slidemenu label span {
+            display: block;
+            padding: 2px;
+            font-size: 12px;
+        }
+
+        .slidemenu label .icon {
+            font-size: 20px;
+            border: solid 2px #ffffff;
+            text-align: center;
+            height: 25px;
+            width: 25px;
+            display: block;
+            margin: 0 auto;
+            line-height: 25px;
+            border-radius: 50%;
+        }
+
+/*Bar Style*/
+
+.slider {
+    width: 100%;
+    height: 3px;
+    display: block;
+    background: #636161;
+    margin-top: 2px;
+    border-radius: 3px;
+}
+
+    .slider .bar {
+        width: 20%;
+        height: 3px;
+        background: #ffffff;
+        border-radius: 3px;
+    }
+
+    /*Animations*/
+    .slidemenu label, .slider .bar {
+        transition: all 500ms ease-in-out;
+        -webkit-transition: all 500ms ease-in-out;
+        -moz-transition: all 500ms ease-in-out;
+    }
+
+/*Toggle*/
+
+.slidemenu .slide-toggle:checked + label {
+    opacity: 1;
+}
+
+
+
+.slidemenu #slide-item-1:checked ~ .slider .bar {
+    margin-left: 0;
+}
+
+.slidemenu #slide-item-2:checked ~ .slider .bar {
+    margin-left: 20%;
+}
+
+.slidemenu #slide-item-3:checked ~ .slider .bar {
+    margin-left: 40%;
+}
+
+.slidemenu #slide-item-4:checked ~ .slider .bar {
+    margin-left: 60%;
+}
+
+.slidemenu #slide-item-5:checked ~ .slider .bar {
+    margin-left: 80%;
+}
+
+.tabcontent {
+    display: none;
+    color: #ffffff;
+}
+
+
+#kalender {
+    position: absolute;
+    top: 70px;
+    left: 10px;
+    bottom: 10px;
+    right: 10px;
+    overflow: hidden;
+}
+
+#smarthome {
+    position: absolute;
+    display: block;
+    top: 55px;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    overflow: hidden;
+}
+
+#floor {
+    position: relative;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+#wrapper {
+    position: absolute;
+}
+
+

@@ -1,0 +1,24 @@
+1. Schritt:
+    Konsole Öffnen und Befehl
+sudo ngrok config add-authtoken 23GbnsUM3bEul9L5IU6rLD7iuKc_71B92V1wiU1yeLxJ6fGUg
+    Konsole Öffnen und Befehl 
+sudo ngrok http 5000 
+     ausführen
+    
+2. Schritt:
+    https-Adresse bei Amazon Alexa Devolper einfügen (Buid - Endpoint - Default Region - Https)
+    - Achtung, nicht "copy URL", sondern wirklich den Text kopieren und eintragen!
+    - Außerdem "My development endpaint is a sub-domain of a domain....
+    
+3. Schritt
+    Neue Konsole öffnen
+    Nicht mehr notwendig: cd /home/pi/Haussteuerung
+    python /home/pi/Haussteuerung/SmartHome.py
+    
+    
+    
+    
+    
+Rest öffnen:
+sudo python /home/pi/Haussteuerung/daytime.py
+sudo python /home/pi/Haussteuerung/website.py
