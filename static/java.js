@@ -17,6 +17,10 @@ function openTab(evt, tab) {
 
     // Aktuelles Nav-Item aktiv setzen
     evt.currentTarget.classList.add('active');
+
+    // Szenen-Panel nur beim SmartHome-Tab sichtbar
+    var panel = document.getElementById('scene-panel');
+    if (panel) panel.style.display = (tab === 'smarthome') ? '' : 'none';
 }
 
 

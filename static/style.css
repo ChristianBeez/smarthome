@@ -7,6 +7,13 @@
     box-sizing: border-box;
 }
 
+/* ---- Dunkle Scrollbalken (global) ---- */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.26); }
+::-webkit-scrollbar-corner { background: transparent; }
+
 html, body {
     width: 100%;
     height: 100%;
@@ -142,7 +149,7 @@ html, body {
 @media (min-width: 700px) {
     #smarthome {
         position: fixed;
-        top: 0; left: 72px; bottom: 0; right: 0;
+        top: 0; left: 72px; bottom: 0; right: 200px;
     }
 }
 
@@ -154,7 +161,7 @@ html, body {
 }
 
 #floor {
-    position: relative;
+    position: absolute;
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
@@ -170,6 +177,7 @@ html, body {
 #kalender {
     display: none;
     overflow: hidden;
+    flex-direction: row;
 }
 
 @media (min-width: 700px) {
@@ -186,21 +194,218 @@ html, body {
     }
 }
 
-#kalender-agenda {
-    padding: 12px 16px;
-    overflow-y: auto;
+/* --- Linkes Panel: 14-Tage-Wochenansicht --- */
+#kal-grid-wrap {
+    flex: 0 0 75%;
+    overflow-x: auto;
+    overflow-y: hidden;
     height: 100%;
-    box-sizing: border-box;
-    background: #f5f5f5;
+    border-right: 1px solid rgba(255,255,255,0.10);
+    display: flex;
+    flex-direction: column;
 }
+
+#kal-grid {
+    display: flex;
+    flex-direction: column;
+    min-width: 1100px;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Header-Reihe */
+.kal-wk-hdr {
+    display: flex;
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.25);
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+
+.kal-wk-gutter {
+    width: 46px;
+    flex-shrink: 0;
+}
+
+.kal-wk-gutter-sm {
+    font-size: 0.58rem;
+    color: rgba(255,255,255,0.30);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kal-wk-col-hdr {
+    flex: 0 0 75px;
+    text-align: center;
+    padding: 8px 2px;
+    border-left: 1px solid rgba(255,255,255,0.06);
+}
+
+.kal-wk-col-hdr.today { background: rgba(66,165,245,0.08); }
+
+.kal-wk-dname {
+    font-size: 0.62em;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    opacity: 0.5;
+}
+
+.kal-wk-dnum {
+    font-size: 1.4em;
+    font-weight: 300;
+    line-height: 1.2;
+    margin-top: 1px;
+}
+
+.kal-wk-col-hdr.today .kal-wk-dnum {
+    color: #42a5f5;
+    font-weight: 600;
+}
+
+/* Ganztags-Reihe */
+.kal-wk-allday {
+    display: flex;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+    min-height: 28px;
+}
+
+.kal-wk-allday-cols {
+    flex: 1;
+    position: relative;
+    display: flex;
+    overflow: hidden;
+}
+
+.kal-wk-allday-col {
+    flex: 0 0 75px;
+    border-left: 1px solid rgba(255,255,255,0.06);
+    min-height: 28px;
+}
+
+.kal-chip-span {
+    position: absolute;
+    z-index: 2;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.66em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: rgba(255,255,255,0.92);
+    line-height: 1.4;
+    height: 20px;
+}
+
+.kal-chip {
+    border-radius: 4px;
+    padding: 2px 5px;
+    font-size: 0.66em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+    color: rgba(255,255,255,0.92);
+    line-height: 1.4;
+}
+
+/* Scrollbares Zeitraster */
+.kal-wk-tgwrap {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    -webkit-overflow-scrolling: touch;
+}
+
+.kal-wk-times {
+    width: 46px;
+    flex-shrink: 0;
+}
+
+.kal-wk-tlabel {
+    height: 60px;
+    font-size: 0.58rem;
+    color: rgba(255,255,255,0.28);
+    text-align: right;
+    padding-right: 6px;
+    padding-top: 2px;
+    box-sizing: border-box;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.kal-wk-daycol {
+    flex: 0 0 75px;
+    position: relative;
+    border-left: 1px solid rgba(255,255,255,0.06);
+}
+
+.kal-wk-daycol.today { background: rgba(66,165,245,0.025); }
+
+.kal-wk-hline {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.05);
+}
+
+.kal-wk-nowline {
+    position: absolute;
+    left: -4px; right: 0;
+    height: 2px;
+    background: #ef5350;
+    z-index: 5;
+}
+
+.kal-wk-nowline::before {
+    content: '';
+    position: absolute;
+    left: 0; top: -4px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #ef5350;
+}
+
+.kal-wk-event {
+    position: absolute;
+    left: 2px; right: 2px;
+    border-radius: 4px;
+    padding: 2px 5px;
+    font-size: 0.67rem;
+    overflow: hidden;
+    color: rgba(255,255,255,0.95);
+    display: flex;
+    flex-direction: column;
+    z-index: 2;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+    cursor: default;
+}
+
+.kal-wk-event b {
+    font-size: 0.90em;
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+/* --- Rechtes Panel: Agenda-Liste, nur vertikal scrollbar --- */
+#kalender-agenda {
+    flex: 0 0 25%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    min-width: 180px;
+}
+
 .kal-date-header {
     font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.07em;
-    color: #888;
+    color: rgba(255,255,255,0.4);
     padding: 18px 4px 6px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
     margin-bottom: 6px;
 }
 .kal-date-header:first-child {
@@ -209,37 +414,107 @@ html, body {
 .kal-event {
     display: flex;
     align-items: center;
-    background: #fff;
+    background: rgba(255,255,255,0.05);
     border-radius: 8px;
     padding: 10px 14px;
     margin-bottom: 6px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 .kal-title {
     font-size: 0.93rem;
     font-weight: 500;
-    color: #222;
+    color: rgba(255,255,255,0.90);
 }
 .kal-meta {
     font-size: 0.76rem;
-    color: #999;
+    color: rgba(255,255,255,0.40);
     margin-top: 2px;
 }
 .kal-cal {
     font-style: italic;
 }
 .kal-empty {
-    color: #bbb;
+    color: rgba(255,255,255,0.25);
     text-align: center;
     padding: 48px 16px;
     font-size: 0.9rem;
+}
+
+/* --- Kalender Event-Steckbrief Modal --- */
+.kal-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.60);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+}
+
+.kal-modal-inner {
+    background: #1c1c2e;
+    border-radius: 14px;
+    min-width: 260px;
+    max-width: 360px;
+    width: 88%;
+    display: flex;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    border: 1px solid rgba(255,255,255,0.09);
+}
+
+.kal-modal-strip {
+    width: 5px;
+    flex-shrink: 0;
+}
+
+.kal-modal-body {
+    flex: 1;
+    padding: 18px 14px 18px;
+}
+
+.kal-modal-title {
+    font-size: 1.0rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.93);
+    margin-bottom: 12px;
+    line-height: 1.3;
+}
+
+.kal-modal-row {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.60);
+    margin-bottom: 5px;
+    display: flex;
+    gap: 7px;
+    align-items: baseline;
+}
+
+.kal-modal-cal-row {
+    margin-top: 8px;
+    color: rgba(255,255,255,0.38);
+    font-style: italic;
+}
+
+.kal-modal-close {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.35);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 14px 12px 0 0;
+    align-self: flex-start;
+    line-height: 1;
+}
+
+.kal-modal-close:hover {
+    color: rgba(255,255,255,0.75);
 }
 
 /* ============================================================
    OTHER TABS  –  scrollable content area
    ============================================================ */
 @media (min-width: 700px) {
-    .tabcontent:not(#smarthome):not(#kalender) {
+    .tabcontent:not(#smarthome):not(#kalender):not(#wetter) {
         position: fixed;
         top: 0; left: 72px; bottom: 0; right: 0;
         padding: 28px 32px;
@@ -248,7 +523,7 @@ html, body {
 }
 
 @media (max-width: 699px) {
-    .tabcontent:not(#smarthome):not(#kalender) {
+    .tabcontent:not(#smarthome):not(#kalender):not(#wetter) {
         position: fixed;
         top: 0; left: 0; right: 0; bottom: 62px;
         padding: 20px 16px;
@@ -336,6 +611,164 @@ input:checked + .toggle-track::before {
     font-weight: bold;
 }
 
+/* Zahl-Input in Einstellungen */
+.config-number {
+    width: 70px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.07);
+    color: #ffffff;
+    font-size: 1em;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.config-number:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.40);
+}
+
+/* ============================================================
+   SZENEN-PANEL
+   ============================================================ */
+
+#scene-panel {
+    display: none;
+}
+
+@media (min-width: 700px) {
+    #scene-panel {
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 200px;
+        background: rgba(10, 10, 10, 0.97);
+        border-left: 1px solid rgba(255, 255, 255, 0.08);
+        overflow-y: auto;
+        padding: 20px 12px;
+        gap: 20px;
+        z-index: 50;
+    }
+}
+
+.scene-cat-label {
+    font-size: 0.64em;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    opacity: 0.35;
+    padding: 2px 2px 7px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 7px;
+}
+
+.scene-tiles {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    margin-bottom: 16px;
+}
+
+.scene-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 4px 9px;
+    border-radius: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: #ffffff;
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s, transform 0.12s;
+    min-height: 62px;
+}
+
+.scene-tile:hover {
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.scene-tile:active {
+    transform: scale(0.91);
+}
+
+.scene-tile:disabled {
+    opacity: 0.28;
+    cursor: default;
+    transform: none;
+}
+
+.scene-tile-icon {
+    font-size: 1.1em;
+    line-height: 1;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+    transition: background 0.18s;
+    flex-shrink: 0;
+}
+
+.scene-tile-label {
+    font-size: 0.60em;
+    letter-spacing: 0.04em;
+    opacity: 0.65;
+    text-align: center;
+    line-height: 1.2;
+}
+
+/* ---- Farbvarianten nach Aktion ---- */
+.scene-tile--up {
+    border-color: rgba(102, 187, 106, 0.22);
+}
+.scene-tile--up .scene-tile-icon {
+    background: rgba(102, 187, 106, 0.20);
+    color: #a5d6a7;
+}
+.scene-tile--up:hover .scene-tile-icon {
+    background: rgba(102, 187, 106, 0.35);
+}
+
+.scene-tile--half {
+    border-color: rgba(255, 213, 79, 0.22);
+}
+.scene-tile--half .scene-tile-icon {
+    background: rgba(255, 213, 79, 0.18);
+    color: #fff176;
+}
+.scene-tile--half:hover .scene-tile-icon {
+    background: rgba(255, 213, 79, 0.32);
+}
+
+.scene-tile--down {
+    border-color: rgba(66, 165, 245, 0.22);
+}
+.scene-tile--down .scene-tile-icon {
+    background: rgba(66, 165, 245, 0.18);
+    color: #90caf9;
+}
+.scene-tile--down:hover .scene-tile-icon {
+    background: rgba(66, 165, 245, 0.32);
+}
+
+.scene-tile--off {
+    border-color: rgba(239, 83, 80, 0.20);
+}
+.scene-tile--off .scene-tile-icon {
+    background: rgba(239, 83, 80, 0.15);
+    color: #ef9a9a;
+}
+.scene-tile--off:hover .scene-tile-icon {
+    background: rgba(239, 83, 80, 0.28);
+}
+
 /* Einstellungen heading */
 #einstellungen h3 {
     margin-bottom: 8px;
@@ -350,38 +783,79 @@ input:checked + .toggle-track::before {
 }
 
 /* ============================================================
-   WETTER-TAB
+   WETTER-TAB  –  vollhohes Flex-Layout, kein vertikaler Scroll
    ============================================================ */
 
-/* Kopfzeile: Station + Uhrzeit */
+@media (min-width: 700px) {
+    #wetter {
+        position: fixed;
+        top: 0; left: 72px; bottom: 0; right: 0;
+        padding: 0;
+        overflow: hidden;
+        flex-direction: column;
+    }
+}
+@media (max-width: 699px) {
+    #wetter {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 62px;
+        padding: 0;
+        overflow: hidden;
+        flex-direction: column;
+    }
+}
+
+/* Obere Zeile: Aktuell (links) + Chart (rechts) */
+.w-top-row {
+    display: flex;
+    flex-direction: row;
+    flex-shrink: 0;
+    padding: 14px 20px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.w-current-col {
+    flex: 0 0 auto;
+    min-width: 165px;
+    padding-right: 18px;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+}
+
+.w-chart-col {
+    flex: 1;
+    padding-left: 16px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Kopfzeile: Station + Uhrzeit + Radar-Icon */
 .w-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 6px;
+    margin-bottom: 6px;
     opacity: 0.5;
-    font-size: 0.85em;
+    font-size: 0.80em;
 }
 
-.w-header::before {
-    content: '📡';
+.radar-btn-icon {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    opacity: 0.8;
+    padding: 0;
+    line-height: 1;
+    color: white;
 }
-
-/* Aktuelle Werte Block */
-.w-current {
-    display: flex;
-    align-items: center;
-    gap: 40px;
-    margin: 16px 0 24px 0;
-    flex-wrap: wrap;
-}
-
-.w-main {
-    min-width: 160px;
-}
+.radar-btn-icon:hover { opacity: 1; }
 
 .w-big-temp {
-    font-size: 5em;
+    font-size: 3.8em;
     font-weight: 200;
     line-height: 1;
     letter-spacing: -2px;
@@ -389,43 +863,40 @@ input:checked + .toggle-track::before {
 
 .w-feels {
     color: rgba(255, 255, 255, 0.55);
-    font-size: 1em;
-    margin-top: 6px;
+    font-size: 0.88em;
+    margin-top: 4px;
+    margin-bottom: 8px;
 }
 
 .w-details {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px 28px;
+    gap: 5px 12px;
 }
 
 .w-detail-item {
-    font-size: 1.05em;
+    font-size: 0.88em;
     white-space: nowrap;
 }
 
-/* Regenradar Button */
-.radar-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin: 4px 0 28px 0;
-    padding: 10px 22px;
-    border-radius: 24px;
-    background: rgba(126, 184, 247, 0.15);
-    color: #7eb8f7;
-    border: 1px solid rgba(126, 184, 247, 0.3);
-    cursor: pointer;
-    font-size: 0.95em;
-    transition: background 0.2s, border-color 0.2s;
+/* Chart-Spalte: übernimmt den Hintergrundrahmen vom .w-charts-Block */
+.w-chart-col .w-charts {
+    flex: 1;
+    margin: 0;
+    background: transparent;
+    border: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
 }
 
-.radar-btn:hover {
-    background: rgba(126, 184, 247, 0.25);
-    border-color: rgba(126, 184, 247, 0.5);
+.w-chart-col .w-chart-wrap {
+    flex: 1;
+    min-height: 80px;
+    height: auto;
 }
 
-/* 5-Tage-Vorschau */
+/* 5-Tage-Vorschau (mittlere Zeile) */
 .w-section-title {
     font-size: 0.78em;
     letter-spacing: 0.08em;
@@ -436,55 +907,76 @@ input:checked + .toggle-track::before {
 
 .w-forecast {
     display: flex;
-    gap: 10px;
+    gap: 6px;
+    flex-shrink: 0;
     flex-wrap: nowrap;
     overflow-x: auto;
-    padding-bottom: 8px;
+    padding: 8px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 .forecast-day {
     text-align: center;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
-    padding: 14px 18px;
+    border-radius: 12px;
+    padding: 8px 12px;
     flex: 1;
-    min-width: 80px;
+    min-width: 68px;
+    cursor: pointer;
+    transition: background 0.18s, transform 0.15s;
+}
+
+.forecast-day:hover {
+    background: rgba(255,255,255,0.12);
+    transform: translateY(-2px);
+}
+
+.forecast-day:active { transform: translateY(0); }
+
+.forecast-day.active {
+    background: rgba(255,255,255,0.14);
+    border-color: rgba(255,255,255,0.30);
 }
 
 .fc-day {
-    font-size: 0.8em;
+    font-size: 0.75em;
     opacity: 0.55;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .fc-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 4px 0 8px 0;
-    min-height: 36px;
+    margin: 3px 0 6px 0;
+    min-height: 30px;
 }
 
-.fc-icon svg {
-    display: block;
-}
+.fc-icon svg { display: block; }
 
 .fc-max {
-    font-size: 1.1em;
+    font-size: 1em;
     font-weight: 600;
 }
 
 .fc-min {
-    font-size: 0.9em;
+    font-size: 0.85em;
     opacity: 0.45;
     margin-top: 2px;
 }
 
 .fc-rain {
-    font-size: 0.78em;
+    font-size: 0.72em;
     color: #7eb8f7;
-    margin-top: 6px;
+    margin-top: 4px;
+}
+
+/* Stündliche Abfolge (untere Zone, ein durchgehender horizontaler Strip) */
+.w-hourly-section {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* Regenradar Modal */
@@ -605,66 +1097,27 @@ input:checked + .toggle-track::before {
 .w-chart-wrap {
     position: relative;
     height: 160px;
+    cursor: pointer;
 }
+
+.radar-btn-compact {
+    margin-left: 8px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 8px;
+    color: rgba(255,255,255,0.85);
+    cursor: pointer;
+    padding: 5px 11px;
+    font-size: 0.82em;
+    white-space: nowrap;
+    transition: background 0.18s;
+    flex-shrink: 0;
+}
+.radar-btn-compact:hover { background: rgba(255,255,255,0.14); }
 
 /* ============================================================
-   FORECAST DETAIL – stündliche Ansicht
+   STUNDEN-STRIP  –  horizontal scrollbarer Stundenstreifen
    ============================================================ */
-
-.forecast-day {
-    cursor: pointer;
-    transition: background 0.18s, transform 0.15s;
-}
-
-.forecast-day:hover {
-    background: rgba(255, 255, 255, 0.12);
-    transform: translateY(-2px);
-}
-
-.forecast-day:active {
-    transform: translateY(0);
-}
-
-.w-detail-panel {
-    margin-top: 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 14px;
-    overflow: hidden;
-}
-
-.detail-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px 10px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.detail-title {
-    font-size: 0.92em;
-    font-weight: 600;
-    opacity: 0.85;
-}
-
-.detail-close {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: white;
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    cursor: pointer;
-    font-size: 0.85em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s;
-}
-
-.detail-close:hover {
-    background: rgba(255, 255, 255, 0.18);
-}
 
 /* Horizontaler Scroll-Strip */
 .stunden-strip {
@@ -695,6 +1148,32 @@ input:checked + .toggle-track::before {
     background: rgba(255, 255, 255, 0.04);
     flex-shrink: 0;
     text-align: center;
+}
+
+.stunden-item.now {
+    background: rgba(255, 255, 255, 0.13);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.stunden-sep-card {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 10px 5px;
+    min-width: 30px;
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.50);
+    background: rgba(255,255,255,0.04);
+    border-right: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    margin-right: 4px;
+    cursor: pointer;
 }
 
 .sh-time {
@@ -850,4 +1329,76 @@ input:checked + .toggle-track::before {
 .sol-total-value {
     font-size: 1.1em;
     font-weight: 500;
+}
+
+/* ============================================================
+   BÖRSE
+   ============================================================ */
+.boe-overview {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+}
+
+@media (max-width: 699px) {
+    .boe-overview { grid-template-columns: repeat(3, 1fr); }
+}
+
+.boe-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 12px;
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.boe-card-name {
+    font-size: 0.72em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.45;
+}
+
+.boe-card-price {
+    font-size: 1.05em;
+    font-weight: 600;
+}
+
+.boe-card-chg {
+    font-size: 0.82em;
+    font-weight: 500;
+}
+
+.boe-pos { color: #66bb6a; }
+.boe-neg { color: #ef5350; }
+
+.boe-period-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.boe-period-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 7px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.78em;
+    padding: 5px 14px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.boe-period-btn:hover {
+    background: rgba(255, 255, 255, 0.11);
+    color: #fff;
+}
+
+.boe-period-btn.active {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #fff;
 }

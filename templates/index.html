@@ -45,8 +45,8 @@
                     var feels = m.feelsLike != null ? m.feelsLike
                               : (m.windChill != null ? m.windChill
                               : (m.heatIndex  != null ? m.heatIndex : m.temp));
-                    document.getElementById('w-temp').textContent     = parseFloat(m.temp).toFixed(1) + '°C';
-                    document.getElementById('w-feels').textContent    = 'Gefühlt ' + parseFloat(feels).toFixed(1) + '°C';
+                    document.getElementById('w-temp').textContent     = Math.round(parseFloat(m.temp)) + '°C';
+                    document.getElementById('w-feels').textContent    = 'Gefühlt ' + Math.round(parseFloat(feels)) + '°C';
                     document.getElementById('w-hum').textContent      = obs.humidity + ' %';
                     document.getElementById('w-wind').textContent     = parseFloat(m.windSpeed).toFixed(1) + ' km/h ' + gradZuRichtung(obs.winddir);
                     document.getElementById('w-precip').textContent   = parseFloat(m.precipTotal).toFixed(1) + ' mm heute';
@@ -65,24 +65,21 @@
                   '&timezone=Europe%2FBerlin&forecast_days=5')
                 .then(r => r.json())
                 .then(function(data) {
-                    _forecastHourly = data.hourly;      // für Detailansicht speichern
+                    _forecastHourly = data.hourly;
+                    bauStundenBereich();
                     var d = data.daily;
                     var container = document.getElementById('w-forecast');
                     container.innerHTML = '';
                     var wochentage = ['So','Mo','Di','Mi','Do','Fr','Sa'];
-                    var vollTage   = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
                     for (var i = 0; i < 5; i++) {
                         var datum = new Date(d.time[i]);
                         var kuerz = i === 0 ? 'Heute' : (i === 1 ? 'Morgen' : wochentage[datum.getDay()]);
-                        var lang  = i === 0 ? 'Heute' : (i === 1 ? 'Morgen' : vollTage[datum.getDay()] + ', ' +
-                                    datum.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}));
                         var icon  = wmoZuIcon(d.weather_code[i]);
-                        var max   = parseFloat(d.temperature_2m_max[i]).toFixed(1);
-                        var min   = parseFloat(d.temperature_2m_min[i]).toFixed(1);
+                        var max   = Math.round(parseFloat(d.temperature_2m_max[i]));
+                        var min   = Math.round(parseFloat(d.temperature_2m_min[i]));
                         var mm    = parseFloat(d.precipitation_sum[i]).toFixed(1);
-                        // data-idx und data-lang für Detailansicht
                         container.innerHTML +=
-                            '<div class="forecast-day" onclick="zeigeTagDetail(' + i + ',\'' + lang + '\')">' +
+                            '<div class="forecast-day' + (i === 0 ? ' active' : '') + '" onclick="scrollZuStunden(' + i + ')">' +
                             '  <div class="fc-day">'  + kuerz + '</div>' +
                             '  <div class="fc-icon">' + icon  + '</div>' +
                             '  <div class="fc-max">'  + max   + '°</div>' +
@@ -180,40 +177,77 @@
             zeigeChart((_chartIdx + dir + 3) % 3);
         }
 
-        /* ---- Forecast-Detailansicht (stündlich) ---- */
-        function zeigeTagDetail(dayIdx, tagName) {
-            if (!_forecastHourly) return;
-            var start = dayIdx * 24;
-            var end   = start + 24;
-            var times = _forecastHourly.time.slice(start, end);
-            var temps = _forecastHourly.temperature_2m.slice(start, end);
-            var codes = _forecastHourly.weather_code.slice(start, end);
-            var regen = _forecastHourly.precipitation.slice(start, end);
-            var wind  = _forecastHourly.wind_speed_10m.slice(start, end);
-
-            var html = '<div class="detail-header">' +
-                       '  <span class="detail-title">' + tagName + '</span>' +
-                       '  <button class="detail-close" onclick="schliesseDetail()">✕</button>' +
-                       '</div><div class="stunden-strip">';
-            for (var i = 0; i < times.length; i++) {
-                html += '<div class="stunden-item">' +
-                        '  <div class="sh-time">'  + times[i].slice(11,16)             + '</div>' +
-                        '  <div class="sh-icon">'  + wmoZuIcon(codes[i], 24)             + '</div>' +
-                        '  <div class="sh-temp">'  + parseFloat(temps[i]).toFixed(1) + '°' + '</div>' +
-                        '  <div class="sh-rain">'  + parseFloat(regen[i]).toFixed(1) + ' mm' + '</div>' +
-                        '  <div class="sh-wind">'  + parseFloat(wind[i]).toFixed(1)  + ' km/h' + '</div>' +
-                        '</div>';
-            }
-            html += '</div>';
-
-            var panel = document.getElementById('w-detail-panel');
-            panel.innerHTML = html;
-            panel.style.display = 'block';
-            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        /* ---- Zum Stundenbereich scrollen + aktiven Tag markieren ---- */
+        function scrollZuStunden(dayIdx) {
+            document.querySelectorAll('.forecast-day').forEach(function(d, i) {
+                d.classList.toggle('active', i === dayIdx);
+            });
+            var el = document.getElementById('stunden-day-' + dayIdx);
+            if (!el) return;
+            var strip = el.closest('.stunden-strip');
+            if (!strip) return;
+            // Separator linksbündig an den sichtbaren Strip-Rand scrollen
+            var stripRect = strip.getBoundingClientRect();
+            var elRect    = el.getBoundingClientRect();
+            strip.scrollLeft += elRect.left - stripRect.left;
         }
 
-        function schliesseDetail() {
-            document.getElementById('w-detail-panel').style.display = 'none';
+        /* ---- Stündliche Abfolge aufbauen — ein durchgehender Strip ---- */
+        function bauStundenBereich() {
+            if (!_forecastHourly) return;
+            var now         = new Date();
+            var currentHour = now.getHours();
+            var wochentage  = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+            var section     = document.getElementById('w-hourly-section');
+            if (!section) return;
+
+            var strip = document.createElement('div');
+            strip.className = 'stunden-strip';
+            var firstNowEl = null;
+
+            for (var dayIdx = 0; dayIdx < 5; dayIdx++) {
+                var startIdx  = dayIdx * 24;
+                var hourStart = (dayIdx === 0) ? currentHour : 0;
+                var times = _forecastHourly.time.slice(startIdx + hourStart, startIdx + 24);
+                var temps = _forecastHourly.temperature_2m.slice(startIdx + hourStart, startIdx + 24);
+                var codes = _forecastHourly.weather_code.slice(startIdx + hourStart, startIdx + 24);
+                var regen = _forecastHourly.precipitation.slice(startIdx + hourStart, startIdx + 24);
+                var wind  = _forecastHourly.wind_speed_10m.slice(startIdx + hourStart, startIdx + 24);
+                if (!times.length) continue;
+
+                var datum   = new Date(times[0].replace('T', ' '));
+                var tagLine = dayIdx === 0 ? 'Heute' : dayIdx === 1 ? 'Morgen'
+                            : wochentage[datum.getDay()] + ' ' + datum.getDate() + '.';
+
+                var sep = document.createElement('div');
+                sep.className = 'stunden-sep-card';
+                sep.id = 'stunden-day-' + dayIdx;
+                sep.textContent = tagLine;
+                strip.appendChild(sep);
+
+                for (var i = 0; i < times.length; i++) {
+                    var isNow = (dayIdx === 0 && i === 0);
+                    var item  = document.createElement('div');
+                    item.className = 'stunden-item' + (isNow ? ' now' : '');
+                    item.innerHTML =
+                        '<div class="sh-time">'  + times[i].slice(11,16)           + '</div>' +
+                        '<div class="sh-icon">'  + wmoZuIcon(codes[i], 22)         + '</div>' +
+                        '<div class="sh-temp">'  + Math.round(parseFloat(temps[i])) + '°</div>' +
+                        '<div class="sh-rain">'  + parseFloat(regen[i]).toFixed(1) + ' mm</div>' +
+                        '<div class="sh-wind">'  + parseFloat(wind[i]).toFixed(1)  + ' km/h</div>';
+                    strip.appendChild(item);
+                    if (isNow) firstNowEl = item;
+                }
+            }
+
+            section.innerHTML = '';
+            section.appendChild(strip);
+
+            if (firstNowEl) {
+                setTimeout(function() {
+                    firstNowEl.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+                }, 150);
+            }
         }
 
         /* ---- Wetterradar (Windy, unterstützt Forecast per Zeitschieber) ---- */
@@ -465,30 +499,203 @@
                     document.getElementById('toggle-extremeHot').checked = cfg.extremeHot;
                     document.getElementById('toggle-christmas').checked = cfg.christmas;
                     document.getElementById('toggle-SchlafRollo').checked = cfg.SchlafRollo;
+                    document.getElementById('input-halbZuDelay').value = cfg.halbZuDelay != null ? cfg.halbZuDelay : 10;
                 });
         }
+
+        /* ---- Szenen ---- */
+        function szene(name, btn) {
+            if (btn) {
+                btn.disabled = true;
+                var orig = btn.textContent;
+                btn.textContent = '…';
+            }
+            fetch('/api/szene/' + name)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!btn) return;
+                    var ms = data.delay ? data.delay * 1000 + 500 : 600;
+                    setTimeout(function() { btn.disabled = false; btn.textContent = orig; }, ms);
+                })
+                .catch(function() { if (btn) { btn.disabled = false; btn.textContent = orig; } });
+        }
+        var _kalEvents = [];
+
+        function zeigeKalEvent(idx) {
+            const ev = _kalEvents[idx];
+            const wt = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+            const mo = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+            const startD = new Date(ev.start + 'T12:00:00');
+            let dateStr = wt[startD.getDay()] + ', ' + startD.getDate() + '. ' + mo[startD.getMonth()];
+            if (ev.start !== ev.end) {
+                let endD = new Date(ev.end + 'T12:00:00');
+                if (ev.allDay) endD = new Date(endD.getTime() - 86400000);
+                if (endD.toISOString().split('T')[0] !== ev.start)
+                    dateStr += ' – ' + wt[endD.getDay()] + ', ' + endD.getDate() + '. ' + mo[endD.getMonth()];
+            }
+            document.getElementById('kal-modal-title').textContent  = ev.title;
+            document.getElementById('kal-modal-date').textContent   = dateStr;
+            document.getElementById('kal-modal-time').textContent   = ev.allDay ? 'Ganztägig' : ev.startTime + ' – ' + ev.endTime + ' Uhr';
+            document.getElementById('kal-modal-cal').textContent    = ev.calendar;
+            document.getElementById('kal-modal-strip').style.background = ev.color || '#546e7a';
+            document.getElementById('kal-modal').style.display = 'flex';
+        }
+
+        function schliesseKalModal() {
+            document.getElementById('kal-modal').style.display = 'none';
+        }
+
         function ladeKalender() {
+            _kalEvents = [];
             fetch('/api/kalender')
                 .then(r => r.json())
                 .then(events => {
+                    const wochentage = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+                    const todayStr   = new Date().toISOString().split('T')[0];
+                    const tomorrow   = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+                    /* --- 7-Tage-Wochenansicht mit Uhrzeiten --- */
+                    const HOUR_H = 60;
+                    const now    = new Date();
+                    const days   = [];
+                    for (let i = 0; i < 14; i++) {
+                        const d = new Date();
+                        d.setDate(d.getDate() + i);
+                        days.push(d.toISOString().split('T')[0]);
+                    }
+
+                    const timedByDay = {};
+                    days.forEach(d => { timedByDay[d] = []; });
+                    events.filter(ev => !ev.allDay && ev.start >= days[0] && ev.start <= days[13])
+                          .forEach(ev => { if (timedByDay[ev.start]) timedByDay[ev.start].push(ev); });
+                    // Ganztags-Events die das Fenster überlappen (inkl. mehrtägige)
+                    const allDaySpan = events.filter(ev => ev.allDay && ev.start <= days[13] && ev.end > days[0]);
+
+                    const grid = document.getElementById('kal-grid');
+                    grid.innerHTML = '';
+
+                    /* Header */
+                    const hdr = document.createElement('div');
+                    hdr.className = 'kal-wk-hdr';
+                    hdr.innerHTML = '<div class="kal-wk-gutter"></div>';
+                    days.forEach(ds => {
+                        const d = new Date(ds + 'T12:00:00');
+                        const h = document.createElement('div');
+                        h.className = 'kal-wk-col-hdr' + (ds === todayStr ? ' today' : '');
+                        h.innerHTML = `<div class="kal-wk-dname">${wochentage[d.getDay()]}</div>` +
+                                      `<div class="kal-wk-dnum">${d.getDate()}</div>`;
+                        hdr.appendChild(h);
+                    });
+                    grid.appendChild(hdr);
+
+                    /* Ganztags-Reihe: Events absolut positioniert, mehrtägig gestreckt */
+                    const allDayRow = document.createElement('div');
+                    allDayRow.className = 'kal-wk-allday';
+                    allDayRow.innerHTML = '<div class="kal-wk-gutter kal-wk-gutter-sm">Ganztag</div>';
+                    const adCols = document.createElement('div');
+                    adCols.className = 'kal-wk-allday-cols';
+                    days.forEach(() => {
+                        const c = document.createElement('div');
+                        c.className = 'kal-wk-allday-col';
+                        adCols.appendChild(c);
+                    });
+                    const CHIP_H = 22, COL_W = 75;
+                    let adRows = 0;
+                    allDaySpan.forEach(ev => {
+                        const si = days.indexOf(ev.start);
+                        const startIdx = si >= 0 ? si : 0;
+                        // ev.end ist exklusiv bei Ganztags-Events → letzten Tag berechnen
+                        const lastDay = new Date(new Date(ev.end + 'T12:00:00').getTime() - 86400000)
+                                            .toISOString().split('T')[0];
+                        const ei = days.indexOf(lastDay);
+                        const endIdx = ei >= 0 ? ei : (lastDay >= days[13] ? 13 : startIdx);
+                        const span = Math.max(endIdx - startIdx + 1, 1);
+                        const chip = document.createElement('div');
+                        chip.className = 'kal-chip kal-chip-span';
+                        chip.style.cssText = `left:${startIdx*COL_W}px;width:${span*COL_W-4}px;` +
+                                             `top:${adRows*(CHIP_H+2)+2}px;background:${ev.color||'#546e7a'};cursor:pointer`;
+                        chip.title = ev.title;
+                        chip.textContent = ev.title;
+                        const idx = _kalEvents.push(ev) - 1;
+                        chip.onclick = () => zeigeKalEvent(idx);
+                        adCols.appendChild(chip);
+                        adRows++;
+                    });
+                    if (adRows > 0) adCols.style.minHeight = (adRows * (CHIP_H + 2) + 6) + 'px';
+                    allDayRow.appendChild(adCols);
+                    grid.appendChild(allDayRow);
+
+                    /* Scrollbares Zeitraster */
+                    const tgWrap = document.createElement('div');
+                    tgWrap.className = 'kal-wk-tgwrap';
+
+                    const timesCol = document.createElement('div');
+                    timesCol.className = 'kal-wk-times';
+                    for (let h = 0; h < 24; h++) {
+                        const lbl = document.createElement('div');
+                        lbl.className = 'kal-wk-tlabel';
+                        lbl.textContent = h.toString().padStart(2,'0') + ':00';
+                        timesCol.appendChild(lbl);
+                    }
+                    tgWrap.appendChild(timesCol);
+
+                    days.forEach(ds => {
+                        const col = document.createElement('div');
+                        col.className = 'kal-wk-daycol' + (ds === todayStr ? ' today' : '');
+                        col.style.height = (24 * HOUR_H) + 'px';
+                        for (let h = 0; h < 24; h++) {
+                            const line = document.createElement('div');
+                            line.className = 'kal-wk-hline';
+                            line.style.top = (h * HOUR_H) + 'px';
+                            col.appendChild(line);
+                        }
+                        if (ds === todayStr) {
+                            const nl = document.createElement('div');
+                            nl.className = 'kal-wk-nowline';
+                            nl.style.top = ((now.getHours() * 60 + now.getMinutes()) / 60 * HOUR_H) + 'px';
+                            col.appendChild(nl);
+                        }
+                        timedByDay[ds].forEach(ev => {
+                            const [sh, sm] = ev.startTime.split(':').map(Number);
+                            const eParts = ev.endTime ? ev.endTime.split(':').map(Number) : [sh+1, sm];
+                            const topPx  = (sh * 60 + sm) / 60 * HOUR_H;
+                            const durMin = Math.max((eParts[0]*60+eParts[1]) - (sh*60+sm), 30);
+                            const evEl = document.createElement('div');
+                            evEl.className = 'kal-wk-event';
+                            evEl.style.cssText = `top:${topPx}px;height:${durMin/60*HOUR_H}px;background:${ev.color||'#546e7a'};cursor:pointer`;
+                            evEl.title = `${ev.startTime}–${ev.endTime} ${ev.title}`;
+                            evEl.innerHTML = `<b>${ev.startTime}</b>${ev.title}`;
+                            const idx = _kalEvents.push(ev) - 1;
+                            evEl.onclick = () => zeigeKalEvent(idx);
+                            col.appendChild(evEl);
+                        });
+                        tgWrap.appendChild(col);
+                    });
+                    grid.appendChild(tgWrap);
+
+                    setTimeout(() => {
+                        tgWrap.scrollTop = Math.max(0, (now.getHours()*60+now.getMinutes())/60*HOUR_H - 100);
+                    }, 100);
+
+                    /* --- Rechte Agenda: alle zukünftigen Events (60 Tage) --- */
+                    const allFuture = events.filter(ev => ev.start >= todayStr);
                     const container = document.getElementById('kalender-agenda');
-                    if (!events.length) {
-                        container.innerHTML = '<p class="kal-empty">Keine Termine in den nächsten 60 Tagen.</p>';
+                    if (!allFuture.length) {
+                        container.innerHTML = '<p class="kal-empty">Keine Termine in den nächsten Monaten.</p>';
                         return;
                     }
-                    const today    = new Date().toISOString().split('T')[0];
-                    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
                     let html = '', lastDate = '';
-                    events.forEach(ev => {
+                    allFuture.forEach(ev => {
                         if (ev.start !== lastDate) {
                             lastDate = ev.start;
                             const d = new Date(ev.start + 'T12:00:00');
                             let label = d.toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'});
-                            if (ev.start === today)    label = 'Heute &mdash; ' + label;
+                            if (ev.start === todayStr) label = 'Heute &mdash; ' + label;
                             else if (ev.start === tomorrow) label = 'Morgen &mdash; ' + label;
                             html += `<div class="kal-date-header">${label}</div>`;
                         }
-                        html += `<div class="kal-event" style="border-left:4px solid ${ev.color}">
+                        const aIdx = _kalEvents.push(ev) - 1;
+                        html += `<div class="kal-event" style="border-left:4px solid ${ev.color};cursor:pointer" onclick="zeigeKalEvent(${aIdx})">
                             <div class="kal-info">
                                 <div class="kal-title">${ev.title}</div>
                                 <div class="kal-meta">${ev.allDay ? 'Ganztägig' : ev.startTime + ' &ndash; ' + ev.endTime} &middot; <span class="kal-cal">${ev.calendar}</span></div>
@@ -501,6 +708,99 @@
                     document.getElementById('kalender-agenda').innerHTML = '<p class="kal-empty">Fehler beim Laden der Termine.</p>';
                 });
         }
+        /* ======================================================
+           BÖRSE
+           ====================================================== */
+        var _boeChart   = null;
+        var _boePeriod  = '1j';
+        var _boeLaden   = false;
+
+        function ladeBoerse() {
+            if (_boeLaden) return;
+            _boeLaden = true;
+            ladeBoerseOverview();
+            ladeBoerseChart(_boePeriod);
+        }
+
+        function ladeBoerseOverview() {
+            fetch('/api/boerse/overview')
+                .then(r => r.json())
+                .then(function(data) {
+                    if (data.error) return;
+                    var html = '';
+                    data.forEach(function(item) {
+                        var pos   = item.changePct >= 0;
+                        var sign  = pos ? '+' : '';
+                        var cls   = pos ? 'boe-pos' : 'boe-neg';
+                        var cur   = item.currency ? ' ' + item.currency : '';
+                        var price = item.price.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        html += `<div class="boe-card">
+                            <div class="boe-card-name">${item.name}</div>
+                            <div class="boe-card-price">${price}${cur}</div>
+                            <div class="boe-card-chg ${cls}">${sign}${item.changePct.toFixed(2)} %</div>
+                        </div>`;
+                    });
+                    document.getElementById('boe-overview').innerHTML = html;
+                })
+                .catch(function() {
+                    document.getElementById('boe-overview').innerHTML = '<span style="opacity:.5;font-size:13px">Keine Daten</span>';
+                });
+        }
+
+        function ladeBoerseChart(period) {
+            _boePeriod = period;
+            document.querySelectorAll('.boe-period-btn').forEach(function(b) {
+                b.classList.toggle('active', b.dataset.period === period);
+            });
+            fetch('/api/boerse/chart?period=' + period)
+                .then(r => r.json())
+                .then(function(data) {
+                    if (data.error || !data.prices || !data.prices.length) return;
+                    var first = data.prices[0];
+                    var last  = data.prices[data.prices.length - 1];
+                    var up    = last >= first;
+                    var color = up ? '#66bb6a' : '#ef5350';
+                    var ctx   = document.getElementById('boe-chart').getContext('2d');
+                    if (_boeChart) _boeChart.destroy();
+                    _boeChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.labels,
+                            datasets: [{
+                                data: data.prices,
+                                borderColor: color,
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: true,
+                                backgroundColor: function(ctx) {
+                                    var g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+                                    g.addColorStop(0, up ? 'rgba(102,187,106,0.18)' : 'rgba(239,83,80,0.18)');
+                                    g.addColorStop(1, 'rgba(0,0,0,0)');
+                                    return g;
+                                },
+                                tension: 0.3,
+                                _einheit: ' €'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: { duration: 300 },
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: { callbacks: { label: function(c) { return c.parsed.y.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €'; } } }
+                            },
+                            scales: {
+                                x: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, maxTicksLimit: 8 },
+                                     grid: { color: 'rgba(255,255,255,0.06)' } },
+                                y: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } },
+                                     grid: { color: 'rgba(255,255,255,0.06)' } }
+                            }
+                        }
+                    });
+                });
+        }
+
         function setConfig(key, value) {
             fetch('/api/config', {
                 method: 'POST',
@@ -527,7 +827,7 @@
             <span class="nav-label">Smart Home</span>
         </div>
 
-        <div class="nav-item" onclick="openTab(event, 'kalender'); ladeKalender();">
+        <div class="nav-item" onclick="openTab(event, 'kalender'); document.getElementById('kalender').style.display='flex'; ladeKalender();">
             <span class="nav-icon">★</span>
             <span class="nav-label">Kalender</span>
         </div>
@@ -537,12 +837,12 @@
             <span class="nav-label">Solar</span>
         </div>
 
-        <div class="nav-item" onclick="openTab(event, 'wetter'); ladeWetter();">
+        <div class="nav-item" onclick="openTab(event, 'wetter'); document.getElementById('wetter').style.display='flex'; ladeWetter();">
             <span class="nav-icon">⛅</span>
             <span class="nav-label">Wetter</span>
         </div>
 
-        <div class="nav-item" onclick="openTab(event, 'boerse')">
+        <div class="nav-item" onclick="openTab(event, 'boerse'); ladeBoerse();">
             <span class="nav-icon">📈</span>
             <span class="nav-label">Börse</span>
         </div>
@@ -612,9 +912,95 @@
         </div>
     </div>
 
+    <!-- Szenen-Panel (nur Desktop, nur bei SmartHome-Tab sichtbar) -->
+    <div id="scene-panel">
+
+        <div class="scene-cat-label">Fensterfront</div>
+        <div class="scene-tiles">
+            <button class="scene-tile scene-tile--up" onclick="szene('fensterfront-hoch', this)">
+                <span class="scene-tile-icon">↑</span>
+                <span class="scene-tile-label">Hoch</span>
+            </button>
+            <button class="scene-tile scene-tile--half" onclick="szene('fensterfront-halb-zu', this)">
+                <span class="scene-tile-icon">↕</span>
+                <span class="scene-tile-label">Halb</span>
+            </button>
+            <button class="scene-tile scene-tile--down" onclick="szene('fensterfront-zu', this)">
+                <span class="scene-tile-icon">↓</span>
+                <span class="scene-tile-label">Zu</span>
+            </button>
+        </div>
+
+        <div class="scene-cat-label">Obergeschoss</div>
+        <div class="scene-tiles">
+            <button class="scene-tile scene-tile--up" onclick="szene('og-jalousie-hoch', this)">
+                <span class="scene-tile-icon">↑</span>
+                <span class="scene-tile-label">Hoch</span>
+            </button>
+            <button class="scene-tile scene-tile--down" onclick="szene('og-jalousie-runter', this)">
+                <span class="scene-tile-icon">↓</span>
+                <span class="scene-tile-label">Runter</span>
+            </button>
+            <button class="scene-tile scene-tile--off" onclick="szene('og-alles-aus', this)">
+                <span class="scene-tile-icon">✕</span>
+                <span class="scene-tile-label">Licht aus</span>
+            </button>
+        </div>
+
+        <div class="scene-cat-label">Dachgeschoss</div>
+        <div class="scene-tiles">
+            <button class="scene-tile scene-tile--up" onclick="szene('dg-jalousie-hoch', this)">
+                <span class="scene-tile-icon">↑</span>
+                <span class="scene-tile-label">Hoch</span>
+            </button>
+            <button class="scene-tile scene-tile--down" onclick="szene('dg-jalousie-runter', this)">
+                <span class="scene-tile-icon">↓</span>
+                <span class="scene-tile-label">Runter</span>
+            </button>
+            <button class="scene-tile scene-tile--off" onclick="szene('dg-alles-aus', this)">
+                <span class="scene-tile-icon">✕</span>
+                <span class="scene-tile-label">Licht aus</span>
+            </button>
+        </div>
+
+        <div class="scene-cat-label">Alles</div>
+        <div class="scene-tiles">
+            <button class="scene-tile scene-tile--up" onclick="szene('alles-jalousie-hoch', this)">
+                <span class="scene-tile-icon">↑</span>
+                <span class="scene-tile-label">Hoch</span>
+            </button>
+            <button class="scene-tile scene-tile--down" onclick="szene('alles-jalousie-runter', this)">
+                <span class="scene-tile-icon">↓</span>
+                <span class="scene-tile-label">Runter</span>
+            </button>
+            <button class="scene-tile scene-tile--off" onclick="szene('alles-aus', this)">
+                <span class="scene-tile-icon">✕</span>
+                <span class="scene-tile-label">Licht aus</span>
+            </button>
+        </div>
+
+    </div>
+
     <!-- Kalender -->
     <div id="kalender" class="tabcontent">
+        <div id="kal-grid-wrap">
+            <div id="kal-grid"></div>
+        </div>
         <div id="kalender-agenda"><p class="kal-empty">Lade Termine…</p></div>
+
+        <!-- Event-Steckbrief Modal -->
+        <div id="kal-modal" class="kal-modal" onclick="if(event.target===this)schliesseKalModal()">
+            <div class="kal-modal-inner">
+                <div class="kal-modal-strip" id="kal-modal-strip"></div>
+                <div class="kal-modal-body">
+                    <div class="kal-modal-title" id="kal-modal-title"></div>
+                    <div class="kal-modal-row">📅 <span id="kal-modal-date"></span></div>
+                    <div class="kal-modal-row">🕐 <span id="kal-modal-time"></span></div>
+                    <div class="kal-modal-row kal-modal-cal-row">📆 <span id="kal-modal-cal"></span></div>
+                </div>
+                <button class="kal-modal-close" onclick="schliesseKalModal()">✕</button>
+            </div>
+        </div>
     </div>
 
     <!-- Photovoltaik -->
@@ -688,51 +1074,51 @@
     <!-- Wetter -->
     <div id="wetter" class="tabcontent">
 
-        <div class="w-header">
-            <span id="w-station">ISTOCK603</span>
-            &nbsp;·&nbsp;
-            <span id="w-time"></span>
-        </div>
-
-        <div class="w-current">
-            <div class="w-main">
+        <!-- Zeile 1: Aktuell (links) + Chart (rechts) -->
+        <div class="w-top-row">
+            <div class="w-current-col">
+                <div class="w-header">
+                    <span id="w-station">ISTOCK603</span>
+                    &nbsp;·&nbsp;
+                    <span id="w-time"></span>
+                </div>
                 <div id="w-temp" class="w-big-temp">–°C</div>
                 <div id="w-feels" class="w-feels">–</div>
+                <div class="w-details">
+                    <div class="w-detail-item">💧 <span id="w-hum">–</span></div>
+                    <div class="w-detail-item">💨 <span id="w-wind">–</span></div>
+                    <div class="w-detail-item">🌧 <span id="w-precip">–</span></div>
+                    <div class="w-detail-item">🔵 <span id="w-pressure">–</span></div>
+                </div>
             </div>
-            <div class="w-details">
-                <div class="w-detail-item">💧 <span id="w-hum">–</span></div>
-                <div class="w-detail-item">💨 <span id="w-wind">–</span></div>
-                <div class="w-detail-item">🌧 <span id="w-precip">–</span></div>
-                <div class="w-detail-item">🔵 <span id="w-pressure">–</span></div>
+            <div class="w-chart-col">
+                <div class="w-charts">
+                    <div class="w-chart-header">
+                        <button class="chart-nav" onclick="wechselChart(-1)">&#8249;</button>
+                        <span id="w-chart-title">Temperaturverlauf heute</span>
+                        <button class="chart-nav" onclick="wechselChart(1)">&#8250;</button>
+                        <button class="radar-btn-compact" onclick="oeffneRadar()">📡 Radar</button>
+                    </div>
+                    <div class="chart-dots">
+                        <span class="chart-dot active" onclick="zeigeChart(0)"></span>
+                        <span class="chart-dot" onclick="zeigeChart(1)"></span>
+                        <span class="chart-dot" onclick="zeigeChart(2)"></span>
+                    </div>
+                    <div class="w-chart-wrap" onclick="wechselChart(1)" title="Klick: nächstes Diagramm">
+                        <canvas id="w-chart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Graphen -->
-        <div class="w-charts">
-            <div class="w-chart-header">
-                <button class="chart-nav" onclick="wechselChart(-1)">&#8249;</button>
-                <span id="w-chart-title">Temperaturverlauf heute</span>
-                <button class="chart-nav" onclick="wechselChart(1)">&#8250;</button>
-            </div>
-            <div class="chart-dots">
-                <span class="chart-dot active" onclick="zeigeChart(0)"></span>
-                <span class="chart-dot" onclick="zeigeChart(1)"></span>
-                <span class="chart-dot" onclick="zeigeChart(2)"></span>
-            </div>
-            <div class="w-chart-wrap">
-                <canvas id="w-chart"></canvas>
-            </div>
+        <!-- Zeile 2: 5-Tage-Vorschau -->
+        <div id="w-forecast" class="w-forecast">
+            <!-- wird per JS befüllt -->
         </div>
 
-        <button class="radar-btn" onclick="oeffneRadar()">🌧 Wetterradar anzeigen</button>
-
-        <div class="w-forecast-section">
-            <div class="w-section-title">5-Tage-Vorschau · Tap für Stunden-Detail</div>
-            <div id="w-forecast" class="w-forecast">
-                <!-- wird per JS befüllt -->
-            </div>
-            <!-- Stündliche Detailansicht (erscheint beim Klick auf einen Tag) -->
-            <div id="w-detail-panel" class="w-detail-panel" style="display:none;"></div>
+        <!-- Zeile 3: Stündliche Abfolge (immer sichtbar, scrollbar) -->
+        <div id="w-hourly-section" class="w-hourly-section">
+            <!-- wird per JS befüllt -->
         </div>
 
         <!-- Regenradar Modal -->
@@ -751,6 +1137,26 @@
 
     <!-- Börse -->
     <div id="boerse" class="tabcontent">
+
+        <div class="w-section-title">Marktüberblick</div>
+        <div id="boe-overview" class="boe-overview">
+            <span style="opacity:.4;font-size:13px">Wird geladen…</span>
+        </div>
+
+        <div class="w-section-title" style="margin-top:24px;">
+            Vanguard All World
+            <span style="opacity:.45;font-size:12px;font-weight:normal;margin-left:6px;">A2PKXG · VWCE.DE</span>
+        </div>
+        <div class="boe-period-row">
+            <button class="boe-period-btn" data-period="1m"  onclick="ladeBoerseChart('1m')">1M</button>
+            <button class="boe-period-btn" data-period="3m"  onclick="ladeBoerseChart('3m')">3M</button>
+            <button class="boe-period-btn active" data-period="1j" onclick="ladeBoerseChart('1j')">1J</button>
+            <button class="boe-period-btn" data-period="5j"  onclick="ladeBoerseChart('5j')">5J</button>
+        </div>
+        <div class="w-chart-wrap" style="margin-top:8px;">
+            <canvas id="boe-chart"></canvas>
+        </div>
+
     </div>
 
     <!-- Einstellungen -->
@@ -792,6 +1198,17 @@
                 <input type="checkbox" id="toggle-SchlafRollo" onchange="setConfig('SchlafRollo', this.checked)">
                 <span class="toggle-track"></span>
             </label>
+        </div>
+
+        <div class="config-item">
+            <div>
+                <strong>⏱ Halb-zu Wartezeit</strong>
+                <p>Sekunden zwischen „Zu"- und „Hoch"-Signal beim <em>Halb zu</em>-Button der Fensterfront.
+                Je nach Rollo-Laufzeit anpassen.</p>
+            </div>
+            <input type="number" id="input-halbZuDelay" min="1" max="60" value="10"
+                   class="config-number"
+                   onchange="setConfig('halbZuDelay', parseInt(this.value))">
         </div>
 
         <p id="config-status">✓ Gespeichert</p>

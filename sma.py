@@ -6,10 +6,22 @@ from collections import deque
 from datetime import datetime
 
 try:
-    from pymodbus.client.sync import ModbusTcpClient as _MBClient
+    # pymodbus >= 3.0
+    from pymodbus.client import ModbusTcpClient as _MBClient
     _MODBUS_OK = True
 except ImportError:
-    _MODBUS_OK = False
+    try:
+        # pymodbus 2.x fallback
+        from pymodbus.client.sync import ModbusTcpClient as _MBClient
+        _MODBUS_OK = True
+    except ImportError:
+        _MODBUS_OK = False
+
+try:
+    import requests as _requests
+    _REQUESTS_OK = True
+except ImportError:
+    _REQUESTS_OK = False
 
 _MCAST_GRP  = '239.12.255.254'
 _MCAST_PORT = 9522
@@ -53,6 +65,9 @@ class SMAManager:
         self._grid_ts = 0.0
         self._inv_ts  = 0.0
         self._bat_ts  = 0.0
+
+        # Sunny Portal HTTP session (wiederverwendet zwischen Polls)
+        self._portal_sess = None
 
     def start(self):
         threading.Thread(target=self._run_speedwire, daemon=True, name='sma-speedwire').start()
@@ -187,60 +202,169 @@ class SMAManager:
                         self._bat = {'battery_soc': soc, 'battery_w': bat_w}
                         self._bat_ts = time.monotonic()
             except Exception as exc:
-                print(f'[SMA Sunny Island] {exc!r}')
+                print(f'[SMA Sunny Island] {exc!r}', file=__import__('sys').stderr)
 
-    # ── Sunny Portal poller (PV + Batterie aus der Cloud) ──────────────────
+    # ── Sunny Portal poller (PV + Batterie via /homemanager API) ───────────────
 
     def _run_portal(self):
         while True:
             try:
                 self._portal_poll()
             except Exception as exc:
-                print(f'[SMA Portal] {exc!r}')
+                print(f'[SMA Portal] {exc!r}', file=__import__('sys').stderr)
             time.sleep(_PORTAL_POLL)
 
+    def _portal_login(self):
+        """Keycloak-Login für sunnyportal.com. Gibt authentifizierte Session zurück."""
+        import re
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
+        if not _REQUESTS_OK:
+            print('[SMA Portal] FEHLER: pip3 install requests', file=__import__('sys').stderr)
+            return None
+
+        BASE = 'https://www.sunnyportal.com'
+        sess = _requests.Session()
+        sess.headers['User-Agent'] = (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        )
+        try:
+            # 1. Login-Seite → Hidden-Fields
+            r = sess.get(f'{BASE}/Templates/Login.aspx', timeout=30)
+            hidden = {}
+            for m in re.finditer(r'<input[^>]+type=["\']?hidden["\']?[^>]*>', r.text, re.I):
+                tag = m.group(0)
+                nm = re.search(r'name=["\']([^"\']+)["\']', tag)
+                vl = re.search(r'value=["\']([^"\']*)["\']', tag)
+                if nm:
+                    hidden[nm.group(1)] = vl.group(1) if vl else ''
+
+            # 2. SmaId-PostBack → 302-Redirect zu Keycloak
+            r2 = sess.post(
+                f'{BASE}/Templates/Login.aspx',
+                data={**hidden,
+                      '__EVENTTARGET':   'ctl00$ContentPlaceHolder1$LoginControl1$SmaId',
+                      '__EVENTARGUMENT': ''},
+                timeout=30, allow_redirects=False,
+            )
+            kc_silent = r2.headers.get('Location', '')
+            if 'login.sma.energy' not in kc_silent:
+                print('[SMA Portal] Kein Keycloak-Redirect', file=__import__('sys').stderr)
+                return None
+
+            # 3. prompt=none entfernen → echtes Login-Formular anzeigen
+            parsed = urlparse(kc_silent)
+            params = {k: v[0] for k, v in parse_qs(parsed.query, keep_blank_values=True).items()}
+            params.pop('prompt', None)
+            r3 = sess.get(urlunparse(parsed._replace(query=urlencode(params))), timeout=30)
+            if 'login.sma.energy' not in r3.url:
+                print('[SMA Portal] Keycloak-Seite nicht geladen', file=__import__('sys').stderr)
+                return None
+
+            # 4. Keycloak-Formular ausfüllen und absenden
+            fm = re.search(r'<form[^>]+action=["\']([^"\']+)["\']', r3.text, re.I)
+            if not fm:
+                print('[SMA Portal] Kein Keycloak-Formular', file=__import__('sys').stderr)
+                return None
+            action = fm.group(1).replace('&amp;', '&')
+            if action.startswith('/'):
+                p = urlparse(r3.url)
+                action = f'{p.scheme}://{p.netloc}{action}'
+
+            kc_h = {}
+            for m in re.finditer(r'<input[^>]+type=["\']?hidden["\']?[^>]*>', r3.text, re.I):
+                tag = m.group(0)
+                nm = re.search(r'name=["\']([^"\']+)["\']', tag)
+                vl = re.search(r'value=["\']([^"\']*)["\']', tag)
+                if nm:
+                    kc_h[nm.group(1)] = vl.group(1) if vl else ''
+
+            r4 = sess.post(action,
+                           data={**kc_h, 'username': self._portal_user,
+                                 'password': self._portal_password},
+                           timeout=30, allow_redirects=True)
+
+            body_l = r4.text.lower()
+            ok = ('logout' in body_l or 'abmelden' in body_l or
+                  'homan' in r4.url.lower() or '/plants/' in r4.url.lower() or
+                  ('sunnyportal.com' in r4.url and 'login' not in r4.url.lower()))
+            if not ok:
+                print('[SMA Portal] Login fehlgeschlagen', file=__import__('sys').stderr)
+                return None
+
+            print('[SMA Portal] Login OK ✓', file=__import__('sys').stderr)
+            return sess
+
+        except Exception as exc:
+            print(f'[SMA Portal] Login-Fehler: {exc!r}', file=__import__('sys').stderr)
+            return None
+
     def _portal_poll(self):
+        """Holt Live-Daten vom /homemanager Endpunkt des Sunny Portals."""
+        import sys
+        if not _REQUESTS_OK:
+            return
+        BASE = 'https://www.sunnyportal.com'
+
+        # Session aufbauen falls nötig
+        if self._portal_sess is None:
+            self._portal_sess = self._portal_login()
+            if self._portal_sess is None:
+                return
+
+        sess = self._portal_sess
         try:
-            import smappy
-        except ImportError:
-            print('[SMA Portal] Paket fehlt: pip install smappy')
-            time.sleep(3600)
+            r = sess.get(
+                f'{BASE}/homemanager',
+                headers={
+                    'Accept':           'application/json, text/javascript, */*; q=0.01',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Referer':          f'{BASE}/FixedPages/HoManLive.aspx',
+                },
+                timeout=30,
+            )
+        except Exception as exc:
+            print(f'[SMA Portal] /homemanager Fehler: {exc!r}', file=sys.stderr)
+            self._portal_sess = None
             return
 
-        client = smappy.Smappy(self._portal_user, self._portal_password)
-        plants = client.get_plants()
-        if not plants:
-            print('[SMA Portal] Keine Anlage im Konto gefunden')
+        # Session abgelaufen?
+        if r.status_code != 200 or 'application/json' not in r.headers.get('Content-Type', ''):
+            print('[SMA Portal] Session abgelaufen – Login beim nächsten Poll', file=sys.stderr)
+            self._portal_sess = None
             return
 
-        oid = plants[0]['oid']
-
-        # Aktuelle Erzeugungsleistung (letztes 5-Minuten-Intervall)
-        pv_w = None
         try:
-            data = client.get_last_data_exact(oid)
-            if data:
-                pv_w = max(0, int(data[-1][1]))
-        except Exception as exc:
-            print(f'[SMA Portal] Leistung: {exc!r}')
+            data = r.json()
+        except Exception:
+            print('[SMA Portal] Kein JSON von /homemanager', file=sys.stderr)
+            self._portal_sess = None
+            return
 
-        # Tagesertrag (Summe aller Intervalle heute)
-        today_pv_kwh = None
-        try:
-            day = client.get_day_overview(oid)
-            if day:
-                total_wh = sum(v for _, v in day if v is not None)
-                today_pv_kwh = round(total_wh / 1000, 3)
-        except Exception as exc:
-            print(f'[SMA Portal] Tagesertrag: {exc!r}')
+        # PV-Leistung (W) – kann nachts None sein
+        pv_raw = data.get('PV')
+        pv_w   = round(max(0.0, float(pv_raw)), 1) if pv_raw is not None else None
 
+        # Batterie: BatteryOut = Entladen (positiv), BatteryIn = Laden (negativ)
+        bat_out = data.get('BatteryOut')
+        bat_in  = data.get('BatteryIn')
+        soc     = data.get('BatteryChargeStatus')
+        bat_w   = None
+        if bat_out is not None and bat_in is not None:
+            bat_w = round(float(bat_out) - float(bat_in), 1)
+        soc_pct = round(float(soc), 1) if soc is not None else None
+
+        now = time.monotonic()
         with self._lock:
-            self._inv = {
-                'pv_w':         pv_w,
-                'today_pv_kwh': today_pv_kwh,
-            }
-            self._inv_ts = time.monotonic()
-        print(f'[SMA Portal] PV={pv_w} W, Heute={today_pv_kwh} kWh')
+            self._inv    = {'pv_w': pv_w, 'today_pv_kwh': None}
+            self._inv_ts = now
+            # Batterie aus Portal nur verwenden wenn kein frischer Modbus-Wert vorhanden
+            if not (bool(self._bat) and (now - self._bat_ts) < 30):
+                self._bat    = {'battery_soc': soc_pct, 'battery_w': bat_w}
+                self._bat_ts = now
+
+        print(f'[SMA Portal] PV={pv_w} W  Bat={bat_w} W  SOC={soc_pct}%', file=sys.stderr)
 
     # ── History accumulation (per-minute averages) ──────────────────────────
 
@@ -280,8 +404,15 @@ class SMAManager:
 _S32_NAN = 0x80000000
 _U32_NAN = 0xFFFFFFFF
 
+def _mb_read(client, address, count, unit):
+    """Reads input registers, compatible with pymodbus 2.x (unit=) and 3.x (slave=)."""
+    try:
+        return client.read_input_registers(address, count, slave=unit)
+    except TypeError:
+        return client.read_input_registers(address, count, unit=unit)
+
 def _read_s32(client, address, unit):
-    rr = client.read_input_registers(address, 2, unit=unit)
+    rr = _mb_read(client, address, 2, unit)
     if rr.isError():
         return None
     raw = (rr.registers[0] << 16) | rr.registers[1]
@@ -290,7 +421,7 @@ def _read_s32(client, address, unit):
     return raw - 0x100000000 if raw & 0x80000000 else raw
 
 def _read_u32(client, address, unit):
-    rr = client.read_input_registers(address, 2, unit=unit)
+    rr = _mb_read(client, address, 2, unit)
     if rr.isError():
         return None
     raw = (rr.registers[0] << 16) | rr.registers[1]
@@ -355,7 +486,9 @@ def _parse_speedwire(data):
                 elif (ch, idx) == (0, 2):
                     result['esupply_wh'] = val / 10.0
             else:
-                break  # unknown type
+                # Unbekannter Typ – Länge schätzen (4 Byte) und überspringen
+                # statt break, damit nachfolgende Records nicht verloren gehen
+                pos += 4
 
         return result if len(result) > 1 else None
     except Exception:
