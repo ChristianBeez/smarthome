@@ -27,7 +27,8 @@ _MCAST_GRP  = '239.12.255.254'
 _MCAST_PORT = 9522
 _STALE_GRID   = 15   # seconds before grid data is considered stale
 _STALE_INV    = 360  # seconds before inverter/battery data is stale
-_PORTAL_POLL  = 300  # seconds between Sunny Portal polls (5 min)
+_PORTAL_POLL    = 300    # seconds between Sunny Portal polls (5 min)
+_PORTAL_RELOGIN = 43200  # seconds between forced re-logins (12 h)
 
 # SMA Modbus unit IDs and register addresses
 # NOTE: Verify these against your device's Modbus fieldlist PDF.
@@ -67,7 +68,8 @@ class SMAManager:
         self._bat_ts  = 0.0
 
         # Sunny Portal HTTP session (wiederverwendet zwischen Polls)
-        self._portal_sess = None
+        self._portal_sess    = None
+        self._portal_login_ts = 0.0   # Zeitstempel letztes Login (monotonic)
 
     def start(self):
         threading.Thread(target=self._run_speedwire, daemon=True, name='sma-speedwire').start()
@@ -209,6 +211,12 @@ class SMAManager:
     def _run_portal(self):
         while True:
             try:
+                # Alle 12 h Session zwangsweise erneuern (Keycloak-Token läuft ab)
+                if self._portal_sess is not None:
+                    age = time.monotonic() - self._portal_login_ts
+                    if age > _PORTAL_RELOGIN:
+                        print('[SMA Portal] 12-h-Limit – erneuere Session', file=__import__('sys').stderr)
+                        self._portal_sess = None
                 self._portal_poll()
             except Exception as exc:
                 print(f'[SMA Portal] {exc!r}', file=__import__('sys').stderr)
@@ -293,6 +301,7 @@ class SMAManager:
                 print('[SMA Portal] Login fehlgeschlagen', file=__import__('sys').stderr)
                 return None
 
+            self._portal_login_ts = time.monotonic()
             print('[SMA Portal] Login OK ✓', file=__import__('sys').stderr)
             return sess
 
