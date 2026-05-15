@@ -18,6 +18,7 @@
         var _chartIdx       = 0;
         var _chartDaten     = { stunden: [], temp: [], regen: [], wind: [], windBoe: [], windStunden: [] };
         var _forecastHourly = null;   // 5-Tage-Stundendaten für Detail-Ansicht
+        var _wetterTimer    = null;   // 5-Minuten Hintergrund-Refresh
 
         var _baseOpts = {
             responsive: true,
@@ -37,6 +38,9 @@
 
         /* ---- Aktuelle Bedingungen (WU Station) ---- */
         function ladeWetter() {
+            if (_wetterTimer === null) {
+                _wetterTimer = setInterval(ladeWetter, 300000);
+            }
             fetch('/api/weather')
                 .then(r => r.json())
                 .then(function(data) {
@@ -45,8 +49,8 @@
                     var feels = m.feelsLike != null ? m.feelsLike
                               : (m.windChill != null ? m.windChill
                               : (m.heatIndex  != null ? m.heatIndex : m.temp));
-                    document.getElementById('w-temp').textContent     = Math.round(parseFloat(m.temp)) + '°C';
-                    document.getElementById('w-feels').textContent    = 'Gefühlt ' + Math.round(parseFloat(feels)) + '°C';
+                    document.getElementById('w-temp').textContent     = parseFloat(m.temp).toFixed(1) + '°C';
+                    document.getElementById('w-feels').textContent    = 'Gefühlt ' + parseFloat(feels).toFixed(1) + '°C';
                     document.getElementById('w-hum').textContent      = obs.humidity + ' %';
                     document.getElementById('w-wind').textContent     = parseFloat(m.windSpeed).toFixed(1) + ' km/h ' + gradZuRichtung(obs.winddir);
                     document.getElementById('w-precip').textContent   = parseFloat(m.precipTotal).toFixed(1) + ' mm heute';
@@ -75,8 +79,8 @@
                         var datum = new Date(d.time[i]);
                         var kuerz = i === 0 ? 'Heute' : (i === 1 ? 'Morgen' : wochentage[datum.getDay()]);
                         var icon  = wmoZuIcon(d.weather_code[i]);
-                        var max   = Math.round(parseFloat(d.temperature_2m_max[i]));
-                        var min   = Math.round(parseFloat(d.temperature_2m_min[i]));
+                        var max   = parseFloat(d.temperature_2m_max[i]).toFixed(1);
+                        var min   = parseFloat(d.temperature_2m_min[i]).toFixed(1);
                         var mm    = parseFloat(d.precipitation_sum[i]).toFixed(1);
                         container.innerHTML +=
                             '<div class="forecast-day' + (i === 0 ? ' active' : '') + '" onclick="scrollZuStunden(' + i + ')">' +
@@ -384,6 +388,27 @@
             }, 10000);
         }
 
+        /* ── Energiefluss-Diagramm ── */
+        var _EF_FWD = {
+            pv:   'M170,74 L170,160',
+            netz: 'M74,158 L137,182',
+            bat:  'M266,158 L203,182',
+        };
+        var _EF_BWD = {
+            pv:   'M170,160 L170,74',
+            netz: 'M137,182 L74,158',
+            bat:  'M203,182 L266,158',
+        };
+
+        function _efSetLine(name, active, forward, color) {
+            var p = document.getElementById('ef-mp-' + name);
+            if (p) p.setAttribute('d', forward ? _EF_FWD[name] : _EF_BWD[name]);
+            document.querySelectorAll('.ef-dot-' + name).forEach(function(d) {
+                d.setAttribute('fill', color);
+                d.setAttribute('opacity', active ? '0.88' : '0');
+            });
+        }
+
         function _ladeSolarAktuell() {
             fetch('/api/solar')
                 .then(function(r) {
@@ -393,34 +418,74 @@
                 .then(function(d) {
                     if (!d.ok) { _solarFehler('Keine Daten vom Home Manager'); return; }
 
-                    document.getElementById('sol-erzeugung').textContent =
-                        d.pv_w !== null && d.pv_w !== undefined ? d.pv_w + ' W' : '–';
-                    document.getElementById('sol-einspeisung').textContent =
-                        d.psupply_w !== null && d.psupply_w !== undefined ? d.psupply_w + ' W' : '–';
-                    document.getElementById('sol-bezug').textContent =
-                        d.pconsume_w !== null && d.pconsume_w !== undefined ? d.pconsume_w + ' W' : '–';
+                    var pvW    = d.pv_w       != null ? d.pv_w       : 0;
+                    var gridIn = d.pconsume_w != null ? d.pconsume_w : 0;
+                    var gridOut= d.psupply_w  != null ? d.psupply_w  : 0;
+                    var batW   = d.battery_w  != null ? d.battery_w  : null;
+                    var soc    = d.battery_soc;
 
-                    var batW = d.battery_w;
-                    var batLabel = '–';
-                    if (batW !== null && batW !== undefined) {
-                        batLabel = (batW >= 0 ? '▲ ' : '▼ ') + Math.abs(batW) + ' W';
+                    /* Hausverbrauch = alle Quellen - alle Senken (außer Haus) */
+                    var houseW = Math.max(0, Math.round(pvW + gridIn - gridOut + (batW != null ? batW : 0)));
+
+                    /* PV */
+                    document.getElementById('ef-pv-w').textContent =
+                        d.pv_w != null ? Math.round(pvW) + ' W' : '– W';
+                    _efSetLine('pv', pvW > 5, true, '#FFD54F');
+
+                    /* Netz */
+                    if (gridOut > 5) {
+                        document.getElementById('ef-netz-w').textContent = Math.round(gridOut) + ' W';
+                        document.getElementById('ef-netz-label').textContent = 'Einspeisung';
+                        _efSetLine('netz', true, false, '#66BB6A');  /* Haus → Netz */
+                    } else if (gridIn > 5) {
+                        document.getElementById('ef-netz-w').textContent = Math.round(gridIn) + ' W';
+                        document.getElementById('ef-netz-label').textContent = 'Netzbezug';
+                        _efSetLine('netz', true, true, '#EF5350');   /* Netz → Haus */
+                    } else {
+                        document.getElementById('ef-netz-w').textContent = '0 W';
+                        document.getElementById('ef-netz-label').textContent = 'Netz';
+                        _efSetLine('netz', false, true, '#EF5350');
                     }
-                    document.getElementById('sol-bat-leistung').textContent = batLabel;
 
-                    var soc = d.battery_soc;
-                    document.getElementById('sol-bat-soc').textContent =
-                        soc !== null && soc !== undefined ? soc + ' %' : '–';
-                    var bar = document.getElementById('sol-soc-fill');
-                    if (bar) bar.style.width = (soc !== null && soc !== undefined ? Math.min(100, soc) : 0) + '%';
+                    /* Batterie */
+                    if (batW != null) {
+                        document.getElementById('ef-bat-w').textContent = Math.abs(Math.round(batW)) + ' W';
+                        document.getElementById('ef-bat-soc').textContent =
+                            soc != null ? Math.round(soc) + '%' : '–%';
+                        /* SOC-Füllbalken im Batterie-Icon (max Breite 38px) */
+                        var r = document.getElementById('ef-bat-fill-rect');
+                        if (r) r.setAttribute('width', Math.round(Math.max(0, Math.min(38, (soc || 0) / 100 * 38))));
+                        if (batW > 10) {
+                            _efSetLine('bat', true, true,  '#26C6DA');  /* Bat → Haus */
+                        } else if (batW < -10) {
+                            _efSetLine('bat', true, false, '#AB47BC');  /* Haus → Bat */
+                        } else {
+                            _efSetLine('bat', false, true, '#26C6DA');
+                        }
+                    } else {
+                        document.getElementById('ef-bat-w').textContent = '– W';
+                        document.getElementById('ef-bat-soc').textContent = '–%';
+                        _efSetLine('bat', false, true, '#26C6DA');
+                    }
 
-                    document.getElementById('sol-ertrag-kwh').textContent =
-                        d.today_pv_kwh !== null && d.today_pv_kwh !== undefined ? d.today_pv_kwh + ' kWh' : '–';
-                    document.getElementById('sol-einspeisung-kwh').textContent =
-                        d.today_supply_kwh !== null && d.today_supply_kwh !== undefined ? d.today_supply_kwh + ' kWh' : '–';
-                    document.getElementById('sol-bezug-kwh').textContent =
-                        d.today_consume_kwh !== null && d.today_consume_kwh !== undefined ? d.today_consume_kwh + ' kWh' : '–';
+                    /* Haus */
+                    document.getElementById('ef-haus-w').textContent = houseW + ' W';
 
-                    document.getElementById('sol-update').textContent = d.last_update;
+                    /* Tagesbilanz */
+                    document.getElementById('ef-supply-kwh').textContent =
+                        d.today_supply_kwh  != null ? d.today_supply_kwh  + ' kWh' : '–';
+                    document.getElementById('ef-consume-kwh').textContent =
+                        d.today_consume_kwh != null ? d.today_consume_kwh + ' kWh' : '–';
+
+                    /* Autarkie (momentan) */
+                    if (houseW > 0) {
+                        var autarky = Math.round(Math.max(0, Math.min(100, (houseW - gridIn) / houseW * 100)));
+                        document.getElementById('ef-autarky').textContent = autarky + '%';
+                    } else {
+                        document.getElementById('ef-autarky').textContent = '–';
+                    }
+
+                    document.getElementById('ef-ts').textContent = d.last_update;
                     document.getElementById('sol-error').style.display = 'none';
                 })
                 .catch(function(e) { _solarFehler(e.message); });
@@ -520,6 +585,8 @@
                 .catch(function() { if (btn) { btn.disabled = false; btn.textContent = orig; } });
         }
         var _kalEvents = [];
+        var _kalCache  = null;
+        var _kalTimer  = null;
 
         function zeigeKalEvent(idx) {
             const ev = _kalEvents[idx];
@@ -545,205 +612,299 @@
             document.getElementById('kal-modal').style.display = 'none';
         }
 
-        function ladeKalender() {
+        function _renderKalender(events) {
             _kalEvents = [];
+            const wochentage = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+            const todayStr   = new Date().toISOString().split('T')[0];
+            const tomorrow   = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+            const HOUR_H = 60;
+            const now    = new Date();
+            const days   = [];
+            for (let i = 0; i < 14; i++) {
+                const d = new Date();
+                d.setDate(d.getDate() + i);
+                days.push(d.toISOString().split('T')[0]);
+            }
+
+            const timedByDay = {};
+            days.forEach(d => { timedByDay[d] = []; });
+            events.filter(ev => !ev.allDay && ev.start >= days[0] && ev.start <= days[13])
+                  .forEach(ev => { if (timedByDay[ev.start]) timedByDay[ev.start].push(ev); });
+            const allDaySpan = events.filter(ev => ev.allDay && ev.start <= days[13] && ev.end > days[0]);
+
+            const grid = document.getElementById('kal-grid');
+            grid.innerHTML = '';
+
+            const hdr = document.createElement('div');
+            hdr.className = 'kal-wk-hdr';
+            hdr.innerHTML = '<div class="kal-wk-gutter"></div>';
+            days.forEach(ds => {
+                const d = new Date(ds + 'T12:00:00');
+                const h = document.createElement('div');
+                h.className = 'kal-wk-col-hdr' + (ds === todayStr ? ' today' : '');
+                h.innerHTML = `<div class="kal-wk-dname">${wochentage[d.getDay()]}</div>` +
+                              `<div class="kal-wk-dnum">${d.getDate()}</div>`;
+                hdr.appendChild(h);
+            });
+            grid.appendChild(hdr);
+
+            const allDayRow = document.createElement('div');
+            allDayRow.className = 'kal-wk-allday';
+            allDayRow.innerHTML = '<div class="kal-wk-gutter kal-wk-gutter-sm">Ganztag</div>';
+            const adCols = document.createElement('div');
+            adCols.className = 'kal-wk-allday-cols';
+            days.forEach(() => {
+                const c = document.createElement('div');
+                c.className = 'kal-wk-allday-col';
+                adCols.appendChild(c);
+            });
+            const CHIP_H = 22, COL_W = 75;
+            const rowOcc = [];
+            allDaySpan.forEach(ev => {
+                const si = days.indexOf(ev.start);
+                const startIdx = si >= 0 ? si : 0;
+                const lastDay = new Date(new Date(ev.end + 'T12:00:00').getTime() - 86400000)
+                                    .toISOString().split('T')[0];
+                const ei = days.indexOf(lastDay);
+                const endIdx = ei >= 0 ? ei : (lastDay >= days[13] ? 13 : startIdx);
+                const span = Math.max(endIdx - startIdx + 1, 1);
+                let row = rowOcc.findIndex(r =>
+                    r.every(occ => endIdx < occ.s || startIdx > occ.e)
+                );
+                if (row < 0) { row = rowOcc.length; rowOcc.push([]); }
+                rowOcc[row].push({ s: startIdx, e: endIdx });
+                const chip = document.createElement('div');
+                chip.className = 'kal-chip kal-chip-span';
+                chip.style.cssText = `left:${startIdx*COL_W}px;width:${span*COL_W-4}px;` +
+                                     `top:${row*(CHIP_H+2)+2}px;background:${ev.color||'#546e7a'};cursor:pointer`;
+                chip.title = ev.title;
+                chip.textContent = ev.title;
+                const idx = _kalEvents.push(ev) - 1;
+                chip.onclick = () => zeigeKalEvent(idx);
+                adCols.appendChild(chip);
+            });
+            if (rowOcc.length > 0) adCols.style.minHeight = (rowOcc.length * (CHIP_H + 2) + 6) + 'px';
+            allDayRow.appendChild(adCols);
+            grid.appendChild(allDayRow);
+
+            const tgWrap = document.createElement('div');
+            tgWrap.className = 'kal-wk-tgwrap';
+            const timesCol = document.createElement('div');
+            timesCol.className = 'kal-wk-times';
+            for (let h = 0; h < 24; h++) {
+                const lbl = document.createElement('div');
+                lbl.className = 'kal-wk-tlabel';
+                lbl.textContent = h.toString().padStart(2,'0') + ':00';
+                timesCol.appendChild(lbl);
+            }
+            tgWrap.appendChild(timesCol);
+
+            days.forEach(ds => {
+                const col = document.createElement('div');
+                col.className = 'kal-wk-daycol' + (ds === todayStr ? ' today' : '');
+                col.style.height = (24 * HOUR_H) + 'px';
+                for (let h = 0; h < 24; h++) {
+                    const line = document.createElement('div');
+                    line.className = 'kal-wk-hline';
+                    line.style.top = (h * HOUR_H) + 'px';
+                    col.appendChild(line);
+                }
+                if (ds === todayStr) {
+                    const nl = document.createElement('div');
+                    nl.className = 'kal-wk-nowline';
+                    nl.style.top = ((now.getHours() * 60 + now.getMinutes()) / 60 * HOUR_H) + 'px';
+                    col.appendChild(nl);
+                }
+                timedByDay[ds].forEach(ev => {
+                    const [sh, sm] = ev.startTime.split(':').map(Number);
+                    const eParts = ev.endTime ? ev.endTime.split(':').map(Number) : [sh+1, sm];
+                    const topPx  = (sh * 60 + sm) / 60 * HOUR_H + 1;
+                    const durMin = Math.max((eParts[0]*60+eParts[1]) - (sh*60+sm), 30);
+                    const evEl = document.createElement('div');
+                    evEl.className = 'kal-wk-event';
+                    evEl.style.cssText = `top:${topPx}px;height:${durMin/60*HOUR_H - 2}px;background:${ev.color||'#546e7a'}`;
+                    evEl.title = `${ev.startTime}–${ev.endTime} ${ev.title}`;
+                    evEl.innerHTML = `<b>${ev.startTime}</b>${ev.title}`;
+                    const idx = _kalEvents.push(ev) - 1;
+                    evEl.onclick = () => zeigeKalEvent(idx);
+                    col.appendChild(evEl);
+                });
+                tgWrap.appendChild(col);
+            });
+            grid.appendChild(tgWrap);
+            setTimeout(() => {
+                tgWrap.scrollTop = Math.max(0, (now.getHours()*60+now.getMinutes())/60*HOUR_H - 100);
+            }, 100);
+
+            // Mehrtägige Events auf jeden Tag aufspannen
+            const agendaMap = {};
+            events.filter(ev => ev.start >= todayStr).forEach(ev => {
+                if (ev.allDay && ev.end > ev.start) {
+                    const cur = new Date(ev.start + 'T12:00:00');
+                    for (let i = 0; i < 60; i++) {
+                        const ds = cur.toISOString().split('T')[0];
+                        if (ds >= ev.end) break;
+                        if (ds >= todayStr) {
+                            if (!agendaMap[ds]) agendaMap[ds] = [];
+                            const isFirst = ds === ev.start;
+                            const lastDs  = new Date(new Date(ev.end+'T12:00:00').getTime()-86400000).toISOString().split('T')[0];
+                            agendaMap[ds].push({ ev, isFirst, isLast: ds === lastDs });
+                        }
+                        cur.setDate(cur.getDate() + 1);
+                    }
+                } else {
+                    if (!agendaMap[ev.start]) agendaMap[ev.start] = [];
+                    agendaMap[ev.start].push({ ev, isFirst: true, isLast: true });
+                }
+            });
+
+            const container = document.getElementById('kalender-agenda');
+            const sortedDates = Object.keys(agendaMap).sort();
+            if (!sortedDates.length) {
+                container.innerHTML = '<p class="kal-empty">Keine Termine in den nächsten Wochen.</p>';
+                return;
+            }
+            let html = '';
+            sortedDates.forEach(ds => {
+                const d = new Date(ds + 'T12:00:00');
+                let label = d.toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'});
+                if (ds === todayStr) label = 'Heute &mdash; ' + label;
+                else if (ds === tomorrow) label = 'Morgen &mdash; ' + label;
+                html += `<div class="kal-date-header">${label}</div>`;
+                agendaMap[ds].sort((a, b) => {
+                    if (a.ev.allDay !== b.ev.allDay) return a.ev.allDay ? -1 : 1;
+                    return (a.ev.startTime||'').localeCompare(b.ev.startTime||'');
+                }).forEach(({ ev, isFirst, isLast }) => {
+                    const aIdx = _kalEvents.push(ev) - 1;
+                    const badge = (!isFirst || !isLast)
+                        ? `<span class="kal-span-badge">${isFirst?'Beginn':isLast?'Ende':'läuft'}</span>` : '';
+                    html += `<div class="kal-event" style="border-left:4px solid ${ev.color};cursor:pointer" onclick="zeigeKalEvent(${aIdx})">
+                        <div class="kal-info">
+                            <div class="kal-title">${ev.title}${badge}</div>
+                            <div class="kal-meta">${ev.allDay ? 'Ganztägig' : ev.startTime + ' &ndash; ' + ev.endTime} &middot; <span class="kal-cal">${ev.calendar}</span></div>
+                        </div>
+                    </div>`;
+                });
+            });
+            container.innerHTML = html;
+        }
+
+        function ladeKalender() {
+            if (_kalTimer === null) {
+                _kalTimer = setInterval(ladeKalender, 3600000);
+            }
+            if (_kalCache !== null) {
+                _renderKalender(_kalCache);
+            }
             fetch('/api/kalender')
                 .then(r => r.json())
                 .then(events => {
-                    const wochentage = ['So','Mo','Di','Mi','Do','Fr','Sa'];
-                    const todayStr   = new Date().toISOString().split('T')[0];
-                    const tomorrow   = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-
-                    /* --- 7-Tage-Wochenansicht mit Uhrzeiten --- */
-                    const HOUR_H = 60;
-                    const now    = new Date();
-                    const days   = [];
-                    for (let i = 0; i < 14; i++) {
-                        const d = new Date();
-                        d.setDate(d.getDate() + i);
-                        days.push(d.toISOString().split('T')[0]);
-                    }
-
-                    const timedByDay = {};
-                    days.forEach(d => { timedByDay[d] = []; });
-                    events.filter(ev => !ev.allDay && ev.start >= days[0] && ev.start <= days[13])
-                          .forEach(ev => { if (timedByDay[ev.start]) timedByDay[ev.start].push(ev); });
-                    // Ganztags-Events die das Fenster überlappen (inkl. mehrtägige)
-                    const allDaySpan = events.filter(ev => ev.allDay && ev.start <= days[13] && ev.end > days[0]);
-
-                    const grid = document.getElementById('kal-grid');
-                    grid.innerHTML = '';
-
-                    /* Header */
-                    const hdr = document.createElement('div');
-                    hdr.className = 'kal-wk-hdr';
-                    hdr.innerHTML = '<div class="kal-wk-gutter"></div>';
-                    days.forEach(ds => {
-                        const d = new Date(ds + 'T12:00:00');
-                        const h = document.createElement('div');
-                        h.className = 'kal-wk-col-hdr' + (ds === todayStr ? ' today' : '');
-                        h.innerHTML = `<div class="kal-wk-dname">${wochentage[d.getDay()]}</div>` +
-                                      `<div class="kal-wk-dnum">${d.getDate()}</div>`;
-                        hdr.appendChild(h);
-                    });
-                    grid.appendChild(hdr);
-
-                    /* Ganztags-Reihe: Events absolut positioniert, mehrtägig gestreckt */
-                    const allDayRow = document.createElement('div');
-                    allDayRow.className = 'kal-wk-allday';
-                    allDayRow.innerHTML = '<div class="kal-wk-gutter kal-wk-gutter-sm">Ganztag</div>';
-                    const adCols = document.createElement('div');
-                    adCols.className = 'kal-wk-allday-cols';
-                    days.forEach(() => {
-                        const c = document.createElement('div');
-                        c.className = 'kal-wk-allday-col';
-                        adCols.appendChild(c);
-                    });
-                    const CHIP_H = 22, COL_W = 75;
-                    let adRows = 0;
-                    allDaySpan.forEach(ev => {
-                        const si = days.indexOf(ev.start);
-                        const startIdx = si >= 0 ? si : 0;
-                        // ev.end ist exklusiv bei Ganztags-Events → letzten Tag berechnen
-                        const lastDay = new Date(new Date(ev.end + 'T12:00:00').getTime() - 86400000)
-                                            .toISOString().split('T')[0];
-                        const ei = days.indexOf(lastDay);
-                        const endIdx = ei >= 0 ? ei : (lastDay >= days[13] ? 13 : startIdx);
-                        const span = Math.max(endIdx - startIdx + 1, 1);
-                        const chip = document.createElement('div');
-                        chip.className = 'kal-chip kal-chip-span';
-                        chip.style.cssText = `left:${startIdx*COL_W}px;width:${span*COL_W-4}px;` +
-                                             `top:${adRows*(CHIP_H+2)+2}px;background:${ev.color||'#546e7a'};cursor:pointer`;
-                        chip.title = ev.title;
-                        chip.textContent = ev.title;
-                        const idx = _kalEvents.push(ev) - 1;
-                        chip.onclick = () => zeigeKalEvent(idx);
-                        adCols.appendChild(chip);
-                        adRows++;
-                    });
-                    if (adRows > 0) adCols.style.minHeight = (adRows * (CHIP_H + 2) + 6) + 'px';
-                    allDayRow.appendChild(adCols);
-                    grid.appendChild(allDayRow);
-
-                    /* Scrollbares Zeitraster */
-                    const tgWrap = document.createElement('div');
-                    tgWrap.className = 'kal-wk-tgwrap';
-
-                    const timesCol = document.createElement('div');
-                    timesCol.className = 'kal-wk-times';
-                    for (let h = 0; h < 24; h++) {
-                        const lbl = document.createElement('div');
-                        lbl.className = 'kal-wk-tlabel';
-                        lbl.textContent = h.toString().padStart(2,'0') + ':00';
-                        timesCol.appendChild(lbl);
-                    }
-                    tgWrap.appendChild(timesCol);
-
-                    days.forEach(ds => {
-                        const col = document.createElement('div');
-                        col.className = 'kal-wk-daycol' + (ds === todayStr ? ' today' : '');
-                        col.style.height = (24 * HOUR_H) + 'px';
-                        for (let h = 0; h < 24; h++) {
-                            const line = document.createElement('div');
-                            line.className = 'kal-wk-hline';
-                            line.style.top = (h * HOUR_H) + 'px';
-                            col.appendChild(line);
-                        }
-                        if (ds === todayStr) {
-                            const nl = document.createElement('div');
-                            nl.className = 'kal-wk-nowline';
-                            nl.style.top = ((now.getHours() * 60 + now.getMinutes()) / 60 * HOUR_H) + 'px';
-                            col.appendChild(nl);
-                        }
-                        timedByDay[ds].forEach(ev => {
-                            const [sh, sm] = ev.startTime.split(':').map(Number);
-                            const eParts = ev.endTime ? ev.endTime.split(':').map(Number) : [sh+1, sm];
-                            const topPx  = (sh * 60 + sm) / 60 * HOUR_H;
-                            const durMin = Math.max((eParts[0]*60+eParts[1]) - (sh*60+sm), 30);
-                            const evEl = document.createElement('div');
-                            evEl.className = 'kal-wk-event';
-                            evEl.style.cssText = `top:${topPx}px;height:${durMin/60*HOUR_H}px;background:${ev.color||'#546e7a'};cursor:pointer`;
-                            evEl.title = `${ev.startTime}–${ev.endTime} ${ev.title}`;
-                            evEl.innerHTML = `<b>${ev.startTime}</b>${ev.title}`;
-                            const idx = _kalEvents.push(ev) - 1;
-                            evEl.onclick = () => zeigeKalEvent(idx);
-                            col.appendChild(evEl);
-                        });
-                        tgWrap.appendChild(col);
-                    });
-                    grid.appendChild(tgWrap);
-
-                    setTimeout(() => {
-                        tgWrap.scrollTop = Math.max(0, (now.getHours()*60+now.getMinutes())/60*HOUR_H - 100);
-                    }, 100);
-
-                    /* --- Rechte Agenda: alle zukünftigen Events (60 Tage) --- */
-                    const allFuture = events.filter(ev => ev.start >= todayStr);
-                    const container = document.getElementById('kalender-agenda');
-                    if (!allFuture.length) {
-                        container.innerHTML = '<p class="kal-empty">Keine Termine in den nächsten Monaten.</p>';
-                        return;
-                    }
-                    let html = '', lastDate = '';
-                    allFuture.forEach(ev => {
-                        if (ev.start !== lastDate) {
-                            lastDate = ev.start;
-                            const d = new Date(ev.start + 'T12:00:00');
-                            let label = d.toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'});
-                            if (ev.start === todayStr) label = 'Heute &mdash; ' + label;
-                            else if (ev.start === tomorrow) label = 'Morgen &mdash; ' + label;
-                            html += `<div class="kal-date-header">${label}</div>`;
-                        }
-                        const aIdx = _kalEvents.push(ev) - 1;
-                        html += `<div class="kal-event" style="border-left:4px solid ${ev.color};cursor:pointer" onclick="zeigeKalEvent(${aIdx})">
-                            <div class="kal-info">
-                                <div class="kal-title">${ev.title}</div>
-                                <div class="kal-meta">${ev.allDay ? 'Ganztägig' : ev.startTime + ' &ndash; ' + ev.endTime} &middot; <span class="kal-cal">${ev.calendar}</span></div>
-                            </div>
-                        </div>`;
-                    });
-                    container.innerHTML = html;
+                    _kalCache = events;
+                    _renderKalender(events);
                 })
                 .catch(() => {
-                    document.getElementById('kalender-agenda').innerHTML = '<p class="kal-empty">Fehler beim Laden der Termine.</p>';
+                    if (_kalCache === null) {
+                        document.getElementById('kalender-agenda').innerHTML =
+                            '<p class="kal-empty">Fehler beim Laden der Termine.</p>';
+                    }
                 });
         }
         /* ======================================================
            BÖRSE
            ====================================================== */
-        var _boeChart   = null;
-        var _boePeriod  = '1j';
-        var _boeLaden   = false;
+        var _boeChart  = null;
+        var _boePeriod = '1j';
+        var _boeCache  = { overview: null, charts: {} };
+        var _boeTimer  = null;
+
+        function _renderBoerseOverview(data) {
+            var html = '';
+            data.forEach(function(item) {
+                var pos   = item.changePct >= 0;
+                var sign  = pos ? '+' : '';
+                var cls   = pos ? 'boe-pos' : 'boe-neg';
+                var cur   = item.currency ? ' ' + item.currency : '';
+                var price = item.price.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                html += `<div class="boe-card">
+                    <div class="boe-card-name">${item.name}</div>
+                    <div class="boe-card-price">${price}${cur}</div>
+                    <div class="boe-card-chg ${cls}">${sign}${item.changePct.toFixed(2)} %</div>
+                </div>`;
+            });
+            document.getElementById('boe-overview').innerHTML = html;
+        }
+
+        function _renderBoerseChart(data) {
+            if (!data || !data.prices || !data.prices.length) return;
+            var first = data.prices[0];
+            var last  = data.prices[data.prices.length - 1];
+            var up    = last >= first;
+            var color = up ? '#66bb6a' : '#ef5350';
+            var ctx   = document.getElementById('boe-chart').getContext('2d');
+            if (_boeChart) _boeChart.destroy();
+            _boeChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        data: data.prices,
+                        borderColor: color,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: true,
+                        backgroundColor: function(ctx) {
+                            var g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+                            g.addColorStop(0, up ? 'rgba(102,187,106,0.18)' : 'rgba(239,83,80,0.18)');
+                            g.addColorStop(1, 'rgba(0,0,0,0)');
+                            return g;
+                        },
+                        tension: 0.3,
+                        _einheit: ' €'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: function(c) { return c.parsed.y.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €'; } } }
+                    },
+                    scales: {
+                        x: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, maxTicksLimit: 8 },
+                             grid: { color: 'rgba(255,255,255,0.06)' } },
+                        y: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } },
+                             grid: { color: 'rgba(255,255,255,0.06)' } }
+                    }
+                }
+            });
+        }
 
         function ladeBoerse() {
-            if (_boeLaden) return;
-            _boeLaden = true;
+            if (_boeTimer === null) {
+                _boeTimer = setInterval(ladeBoerseOverview, 600000);
+            }
             ladeBoerseOverview();
             ladeBoerseChart(_boePeriod);
         }
 
         function ladeBoerseOverview() {
+            if (_boeCache.overview !== null) {
+                _renderBoerseOverview(_boeCache.overview);
+            }
             fetch('/api/boerse/overview')
                 .then(r => r.json())
                 .then(function(data) {
                     if (data.error) return;
-                    var html = '';
-                    data.forEach(function(item) {
-                        var pos   = item.changePct >= 0;
-                        var sign  = pos ? '+' : '';
-                        var cls   = pos ? 'boe-pos' : 'boe-neg';
-                        var cur   = item.currency ? ' ' + item.currency : '';
-                        var price = item.price.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                        html += `<div class="boe-card">
-                            <div class="boe-card-name">${item.name}</div>
-                            <div class="boe-card-price">${price}${cur}</div>
-                            <div class="boe-card-chg ${cls}">${sign}${item.changePct.toFixed(2)} %</div>
-                        </div>`;
-                    });
-                    document.getElementById('boe-overview').innerHTML = html;
+                    _boeCache.overview = data;
+                    _renderBoerseOverview(data);
                 })
                 .catch(function() {
-                    document.getElementById('boe-overview').innerHTML = '<span style="opacity:.5;font-size:13px">Keine Daten</span>';
+                    if (_boeCache.overview === null) {
+                        document.getElementById('boe-overview').innerHTML =
+                            '<span style="opacity:.5;font-size:13px">Keine Daten</span>';
+                    }
                 });
         }
 
@@ -752,52 +913,15 @@
             document.querySelectorAll('.boe-period-btn').forEach(function(b) {
                 b.classList.toggle('active', b.dataset.period === period);
             });
+            if (_boeCache.charts[period]) {
+                _renderBoerseChart(_boeCache.charts[period]);
+            }
             fetch('/api/boerse/chart?period=' + period)
                 .then(r => r.json())
                 .then(function(data) {
                     if (data.error || !data.prices || !data.prices.length) return;
-                    var first = data.prices[0];
-                    var last  = data.prices[data.prices.length - 1];
-                    var up    = last >= first;
-                    var color = up ? '#66bb6a' : '#ef5350';
-                    var ctx   = document.getElementById('boe-chart').getContext('2d');
-                    if (_boeChart) _boeChart.destroy();
-                    _boeChart = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: data.labels,
-                            datasets: [{
-                                data: data.prices,
-                                borderColor: color,
-                                borderWidth: 2,
-                                pointRadius: 0,
-                                fill: true,
-                                backgroundColor: function(ctx) {
-                                    var g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
-                                    g.addColorStop(0, up ? 'rgba(102,187,106,0.18)' : 'rgba(239,83,80,0.18)');
-                                    g.addColorStop(1, 'rgba(0,0,0,0)');
-                                    return g;
-                                },
-                                tension: 0.3,
-                                _einheit: ' €'
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            animation: { duration: 300 },
-                            plugins: {
-                                legend: { display: false },
-                                tooltip: { callbacks: { label: function(c) { return c.parsed.y.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €'; } } }
-                            },
-                            scales: {
-                                x: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, maxTicksLimit: 8 },
-                                     grid: { color: 'rgba(255,255,255,0.06)' } },
-                                y: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } },
-                                     grid: { color: 'rgba(255,255,255,0.06)' } }
-                            }
-                        }
-                    });
+                    _boeCache.charts[period] = data;
+                    _renderBoerseChart(data);
                 });
         }
 
@@ -1003,70 +1127,150 @@
         </div>
     </div>
 
-    <!-- Photovoltaik -->
+    <!-- Photovoltaik / Energiefluss -->
     <div id="solar" class="tabcontent">
 
         <div id="sol-error" class="sol-error" style="display:none;"></div>
 
-        <div class="sol-header">
-            <span class="w-section-title">Aktuelle Leistung</span>
-            <span class="sol-ts">Stand: <span id="sol-update">–</span></span>
-        </div>
+        <!-- ── Energiefluss-Diagramm ── -->
+        <div class="ef-wrap">
+            <div class="ef-header">
+                <span class="w-section-title">Energiefluss</span>
+                <span class="ef-ts">Stand: <span id="ef-ts">–</span></span>
+            </div>
 
-        <!-- Reihe 1: PV, Einspeisung, Bezug -->
-        <div class="sol-cards">
-            <div class="sol-card sol-card--green">
-                <div class="sol-card-label">Erzeugung</div>
-                <div class="sol-card-value" id="sol-erzeugung">– W</div>
-            </div>
-            <div class="sol-card sol-card--yellow">
-                <div class="sol-card-label">Einspeisung</div>
-                <div class="sol-card-value" id="sol-einspeisung">– W</div>
-            </div>
-            <div class="sol-card sol-card--red">
-                <div class="sol-card-label">Netzbezug</div>
-                <div class="sol-card-value" id="sol-bezug">– W</div>
-            </div>
-        </div>
+            <div class="ef-diagram">
+              <div class="ef-diagram-inner">
 
-        <!-- Reihe 2: Batterie -->
-        <div class="sol-cards sol-cards--bat" style="margin-top:12px;">
-            <div class="sol-card sol-card--blue">
-                <div class="sol-card-label">Batterie</div>
-                <div class="sol-card-value" id="sol-bat-leistung">– W</div>
-            </div>
-            <div class="sol-card sol-card--blue">
-                <div class="sol-card-label">Ladezustand</div>
-                <div class="sol-card-value" id="sol-bat-soc">– %</div>
-                <div class="sol-soc-bar"><div class="sol-soc-fill" id="sol-soc-fill"></div></div>
-            </div>
-        </div>
+                <!-- SVG: Verbindungslinien + animierte Dots -->
+                <svg class="ef-svg" viewBox="0 0 340 240" preserveAspectRatio="xMidYMid meet">
 
-        <!-- Tagesbilanz -->
-        <div class="w-section-title" style="margin-top:24px;">Tagesbilanz</div>
-        <div class="sol-totals">
-            <div class="sol-total-item">
-                <span class="sol-total-label">Tagesertrag</span>
-                <span class="sol-total-value" id="sol-ertrag-kwh">– kWh</span>
+                    <!-- Unsichtbare Motion-Pfade (Richtung per JS änderbar) -->
+                    <path id="ef-mp-pv"   fill="none" stroke="none" d="M170,74 L170,160"/>
+                    <path id="ef-mp-netz" fill="none" stroke="none" d="M74,158 L137,182"/>
+                    <path id="ef-mp-bat"  fill="none" stroke="none" d="M266,158 L203,182"/>
+
+                    <!-- Sichtbare Verbindungslinien -->
+                    <line class="ef-line" x1="170" y1="74"  x2="170" y2="160"/>
+                    <line class="ef-line" x1="74"  y1="158" x2="137" y2="182"/>
+                    <line class="ef-line" x1="266" y1="158" x2="203" y2="182"/>
+
+                    <!-- PV-Dots -->
+                    <circle class="ef-dot ef-dot-pv" r="5" opacity="0">
+                        <animateMotion dur="1.5s" begin="0s"   repeatCount="indefinite"><mpath href="#ef-mp-pv"/></animateMotion>
+                    </circle>
+                    <circle class="ef-dot ef-dot-pv" r="5" opacity="0">
+                        <animateMotion dur="1.5s" begin="0.5s" repeatCount="indefinite"><mpath href="#ef-mp-pv"/></animateMotion>
+                    </circle>
+                    <circle class="ef-dot ef-dot-pv" r="5" opacity="0">
+                        <animateMotion dur="1.5s" begin="1.0s" repeatCount="indefinite"><mpath href="#ef-mp-pv"/></animateMotion>
+                    </circle>
+
+                    <!-- Netz-Dots -->
+                    <circle class="ef-dot ef-dot-netz" r="5" opacity="0">
+                        <animateMotion dur="1.8s" begin="0s"   repeatCount="indefinite"><mpath href="#ef-mp-netz"/></animateMotion>
+                    </circle>
+                    <circle class="ef-dot ef-dot-netz" r="5" opacity="0">
+                        <animateMotion dur="1.8s" begin="0.6s" repeatCount="indefinite"><mpath href="#ef-mp-netz"/></animateMotion>
+                    </circle>
+                    <circle class="ef-dot ef-dot-netz" r="5" opacity="0">
+                        <animateMotion dur="1.8s" begin="1.2s" repeatCount="indefinite"><mpath href="#ef-mp-netz"/></animateMotion>
+                    </circle>
+
+                    <!-- Batterie-Dots -->
+                    <circle class="ef-dot ef-dot-bat" r="5" opacity="0">
+                        <animateMotion dur="1.8s" begin="0s"   repeatCount="indefinite"><mpath href="#ef-mp-bat"/></animateMotion>
+                    </circle>
+                    <circle class="ef-dot ef-dot-bat" r="5" opacity="0">
+                        <animateMotion dur="1.8s" begin="0.6s" repeatCount="indefinite"><mpath href="#ef-mp-bat"/></animateMotion>
+                    </circle>
+                    <circle class="ef-dot ef-dot-bat" r="5" opacity="0">
+                        <animateMotion dur="1.8s" begin="1.2s" repeatCount="indefinite"><mpath href="#ef-mp-bat"/></animateMotion>
+                    </circle>
+                </svg>
+
+                <!-- ☀ PV (oben mitte) -->
+                <div class="ef-node ef-node-pv">
+                    <div class="ef-node-bg ef-bg-pv">
+                        <svg viewBox="0 0 48 48" width="28" height="28">
+                            <circle cx="24" cy="24" r="9" fill="#FFD54F"/>
+                            <g stroke="#FFD54F" stroke-width="2.5" stroke-linecap="round">
+                                <line x1="24" y1="4"  x2="24" y2="10"/>
+                                <line x1="24" y1="38" x2="24" y2="44"/>
+                                <line x1="4"  y1="24" x2="10" y2="24"/>
+                                <line x1="38" y1="24" x2="44" y2="24"/>
+                                <line x1="8.7"  y1="8.7"  x2="12.9" y2="12.9"/>
+                                <line x1="35.1" y1="35.1" x2="39.3" y2="39.3"/>
+                                <line x1="39.3" y1="8.7"  x2="35.1" y2="12.9"/>
+                                <line x1="12.9" y1="35.1" x2="8.7"  y2="39.3"/>
+                            </g>
+                        </svg>
+                        <span class="ef-val" id="ef-pv-w">–</span>
+                    </div>
+                    <span class="ef-label">Erzeugung</span>
+                </div>
+
+                <!-- ⚡ Netz (links) -->
+                <div class="ef-node ef-node-netz">
+                    <div class="ef-node-bg ef-bg-netz">
+                        <svg viewBox="0 0 48 48" width="26" height="26">
+                            <polygon points="27,3 19,25 25,25 21,45 31,21 25,21" fill="#90A4AE"/>
+                        </svg>
+                        <span class="ef-val" id="ef-netz-w">–</span>
+                    </div>
+                    <span class="ef-label" id="ef-netz-label">Netz</span>
+                </div>
+
+                <!-- 🔋 Batterie (rechts) -->
+                <div class="ef-node ef-node-bat">
+                    <div class="ef-node-bg ef-bg-bat">
+                        <svg viewBox="0 0 52 28" width="34" height="18">
+                            <rect x="1" y="1" width="44" height="26" rx="4" fill="none" stroke="#90A4AE" stroke-width="2"/>
+                            <rect x="45" y="8" width="6" height="12" rx="2" fill="#90A4AE"/>
+                            <rect id="ef-bat-fill-rect" x="4" y="4" width="0" height="20" rx="2" fill="#26C6DA"/>
+                        </svg>
+                        <span class="ef-val" id="ef-bat-w">–</span>
+                    </div>
+                    <span class="ef-soc-badge" id="ef-bat-soc">–%</span>
+                    <span class="ef-label">Batterie</span>
+                </div>
+
+                <!-- 🏠 Haus (unten mitte) -->
+                <div class="ef-node ef-node-haus">
+                    <div class="ef-node-bg ef-bg-haus">
+                        <svg viewBox="0 0 48 48" width="28" height="28">
+                            <polygon points="24,5 44,22 40,22 40,43 8,43 8,22 4,22" fill="none" stroke="#B0BEC5" stroke-width="2.5" stroke-linejoin="round"/>
+                            <rect x="18" y="29" width="12" height="14" rx="1.5" fill="#B0BEC5" opacity="0.55"/>
+                        </svg>
+                        <span class="ef-val" id="ef-haus-w">–</span>
+                    </div>
+                    <span class="ef-label">Verbrauch</span>
+                </div>
+
+              </div><!-- ef-diagram-inner -->
+            </div><!-- ef-diagram -->
+
+            <!-- Tages-Kennzahlen -->
+            <div class="ef-stats">
+                <div class="ef-stat">
+                    <div class="ef-stat-val" id="ef-autarky">–</div>
+                    <div class="ef-stat-label">Autarkie</div>
+                </div>
+                <div class="ef-stat">
+                    <div class="ef-stat-val" id="ef-supply-kwh">–</div>
+                    <div class="ef-stat-label">Einspeisung heute</div>
+                </div>
+                <div class="ef-stat">
+                    <div class="ef-stat-val" id="ef-consume-kwh">–</div>
+                    <div class="ef-stat-label">Bezug heute</div>
+                </div>
             </div>
-            <div class="sol-total-item">
-                <span class="sol-total-label">Einspeisung</span>
-                <span class="sol-total-value" id="sol-einspeisung-kwh">– kWh</span>
-            </div>
-            <div class="sol-total-item">
-                <span class="sol-total-label">Bezug</span>
-                <span class="sol-total-value" id="sol-bezug-kwh">– kWh</span>
-            </div>
-        </div>
+        </div><!-- ef-wrap -->
 
         <!-- Leistungsverlauf -->
-        <div class="w-charts" style="margin-top:24px;">
-            <div class="w-chart-header">
-                <span>Leistungsverlauf heute</span>
-            </div>
-            <div class="w-chart-wrap">
-                <canvas id="sol-chart"></canvas>
-            </div>
+        <div class="w-charts" style="margin-top:8px;">
+            <div class="w-chart-header"><span>Leistungsverlauf heute</span></div>
+            <div class="w-chart-wrap"><canvas id="sol-chart"></canvas></div>
         </div>
 
     </div>

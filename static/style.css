@@ -370,7 +370,7 @@ html, body {
     position: absolute;
     left: 2px; right: 2px;
     border-radius: 4px;
-    padding: 2px 5px;
+    padding: 3px 5px;
     font-size: 0.67rem;
     overflow: hidden;
     color: rgba(255,255,255,0.95);
@@ -378,7 +378,10 @@ html, body {
     flex-direction: column;
     z-index: 2;
     box-shadow: 0 1px 3px rgba(0,0,0,0.35);
-    cursor: default;
+    cursor: pointer;
+    /* Oberkante heller → aneinanderfolgende Events klar trennbar */
+    border-top: 2px solid rgba(255,255,255,0.22);
+    box-sizing: border-box;
 }
 
 .kal-wk-event b {
@@ -431,6 +434,20 @@ html, body {
 }
 .kal-cal {
     font-style: italic;
+}
+
+.kal-span-badge {
+    display: inline-block;
+    font-size: 0.65em;
+    font-weight: 600;
+    background: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.55);
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-left: 5px;
+    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 .kal-empty {
     color: rgba(255,255,255,0.25);
@@ -1329,6 +1346,141 @@ input:checked + .toggle-track::before {
 .sol-total-value {
     font-size: 1.1em;
     font-weight: 500;
+}
+
+/* ============================================================
+   ENERGIEFLUSS-DIAGRAMM
+   ============================================================ */
+.ef-wrap {
+    padding: 16px;
+    max-width: 460px;
+    margin: 0 auto;
+}
+
+.ef-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+}
+
+.ef-ts {
+    font-size: 11px;
+    opacity: 0.4;
+}
+
+/* Aspect-ratio container (340 : 240) */
+.ef-diagram {
+    position: relative;
+    width: 100%;
+    padding-top: 70.6%;   /* 240/340 × 100 */
+}
+
+.ef-diagram-inner {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+}
+
+.ef-svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    overflow: visible;
+}
+
+.ef-line {
+    stroke: rgba(255,255,255,0.13);
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+/* ── Knoten ── */
+.ef-node {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Positionen (% entsprechen SVG-Koordinaten / viewBox-Größe) */
+.ef-node-pv   { left: 50%;    top: 17.5%; }
+.ef-node-netz { left: 13.2%;  top: 60.4%; }
+.ef-node-bat  { left: 86.8%;  top: 60.4%; }
+.ef-node-haus { left: 50%;    top: 82.5%; }
+
+.ef-node-bg {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.07);
+    border: 1.5px solid rgba(255,255,255,0.12);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.ef-bg-pv   { border-color: rgba(255, 213,  79, 0.35); background: rgba(255,213,79,0.07); }
+.ef-bg-netz { border-color: rgba(144, 164, 174, 0.25); }
+.ef-bg-bat  { border-color: rgba( 38, 198, 218, 0.30); background: rgba(38,198,218,0.06); }
+.ef-bg-haus { border-color: rgba(255, 255, 255, 0.20); background: rgba(255,255,255,0.09); }
+
+.ef-val {
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+.ef-label {
+    font-size: 10px;
+    opacity: 0.42;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.ef-soc-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: #26C6DA;
+    background: rgba(38, 198, 218, 0.14);
+    border-radius: 8px;
+    padding: 1px 7px;
+    line-height: 1.5;
+    order: -1;   /* über dem Label, unter dem Kreis */
+}
+
+/* ── Tages-Kennzahlen ── */
+.ef-stats {
+    display: flex;
+    justify-content: space-around;
+    padding: 14px 0 6px;
+    margin-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.ef-stat { text-align: center; }
+
+.ef-stat-val {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.ef-stat-label {
+    font-size: 10px;
+    opacity: 0.38;
+    margin-top: 3px;
+}
+
+/* Größere Knoten auf breiteren Screens */
+@media (min-width: 380px) {
+    .ef-node-bg { width: 76px; height: 76px; }
+    .ef-val { font-size: 13px; }
 }
 
 /* ============================================================
