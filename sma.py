@@ -68,8 +68,14 @@ class SMAManager:
         self._bat_ts  = 0.0
 
         # Sunny Portal HTTP session (wiederverwendet zwischen Polls)
-        self._portal_sess    = None
+        self._portal_sess     = None
         self._portal_login_ts = 0.0   # Zeitstempel letztes Login (monotonic)
+
+        # PV-Tagesertrag per Trapez-Integration (5-min-Abtastrate)
+        self._pv_day_kwh  = 0.0   # akkumulierter Ertrag heute (kWh)
+        self._pv_day_date = None  # Datum der Akkumulation (YYYY-MM-DD)
+        self._pv_last_w   = None  # letzter PV-Wert (W) für Trapezregel
+        self._pv_last_ts  = None  # monotonic-Zeitstempel des letzten Werts
 
     def start(self):
         threading.Thread(target=self._run_speedwire, daemon=True, name='sma-speedwire').start()
@@ -371,16 +377,35 @@ class SMAManager:
             bat_w = round(float(bat_out) - float(bat_in), 1)
         soc_pct = round(float(soc), 1) if soc is not None else None
 
-        now = time.monotonic()
+        # ── PV-Tagesertrag per Trapez-Integration ──────────────────────────────
+        # Jede 5-min-Stichprobe: Ertrag += Mittelwert(aktuell, vorher) × Δt [h] / 1000
+        today = datetime.now().strftime('%Y-%m-%d')
+        now   = time.monotonic()
+
+        pv_increment = 0.0
+        if self._pv_day_date == today and self._pv_last_ts is not None:
+            dt_h = (now - self._pv_last_ts) / 3600.0
+            avg_w = ((pv_w or 0.0) + (self._pv_last_w or 0.0)) / 2.0
+            pv_increment = avg_w * dt_h / 1000.0
+
+        self._pv_last_w  = pv_w or 0.0
+        self._pv_last_ts = now
+
         with self._lock:
-            self._inv    = {'pv_w': pv_w, 'today_pv_kwh': None}
+            if self._pv_day_date != today:
+                self._pv_day_date = today
+                self._pv_day_kwh  = 0.0
+            self._pv_day_kwh = round(self._pv_day_kwh + pv_increment, 3)
+
+            self._inv    = {'pv_w': pv_w, 'today_pv_kwh': self._pv_day_kwh}
             self._inv_ts = now
             # Batterie aus Portal nur verwenden wenn kein frischer Modbus-Wert vorhanden
             if not (bool(self._bat) and (now - self._bat_ts) < 30):
                 self._bat    = {'battery_soc': soc_pct, 'battery_w': bat_w}
                 self._bat_ts = now
 
-        print(f'[SMA Portal] PV={pv_w} W  Bat={bat_w} W  SOC={soc_pct}%', file=sys.stderr)
+        print(f'[SMA Portal] PV={pv_w} W  Ertrag={self._pv_day_kwh} kWh  Bat={bat_w} W  SOC={soc_pct}%',
+              file=sys.stderr)
 
     # ── History accumulation (per-minute averages) ──────────────────────────
 

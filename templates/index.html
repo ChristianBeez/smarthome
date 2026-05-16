@@ -472,6 +472,8 @@
                     document.getElementById('ef-haus-w').textContent = houseW + ' W';
 
                     /* Tagesbilanz */
+                    document.getElementById('ef-pv-kwh').textContent =
+                        d.today_pv_kwh      != null ? d.today_pv_kwh      + ' kWh' : '–';
                     document.getElementById('ef-supply-kwh').textContent =
                         d.today_supply_kwh  != null ? d.today_supply_kwh  + ' kWh' : '–';
                     document.getElementById('ef-consume-kwh').textContent =
@@ -810,119 +812,129 @@
                     }
                 });
         }
-        /* ======================================================
-           BÖRSE
-           ====================================================== */
-        var _boeChart  = null;
-        var _boePeriod = '1j';
-        var _boeCache  = { overview: null, charts: {} };
-        var _boeTimer  = null;
-
-        function _renderBoerseOverview(data) {
-            var html = '';
-            data.forEach(function(item) {
-                var pos   = item.changePct >= 0;
-                var sign  = pos ? '+' : '';
-                var cls   = pos ? 'boe-pos' : 'boe-neg';
-                var cur   = item.currency ? ' ' + item.currency : '';
-                var price = item.price.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                html += `<div class="boe-card">
-                    <div class="boe-card-name">${item.name}</div>
-                    <div class="boe-card-price">${price}${cur}</div>
-                    <div class="boe-card-chg ${cls}">${sign}${item.changePct.toFixed(2)} %</div>
-                </div>`;
-            });
-            document.getElementById('boe-overview').innerHTML = html;
+        function toggleSzenenSheet() {
+            var sheet    = document.getElementById('szenen-sheet');
+            var backdrop = document.getElementById('szenen-backdrop');
+            var open = sheet.classList.toggle('open');
+            backdrop.classList.toggle('open', open);
         }
 
-        function _renderBoerseChart(data) {
-            if (!data || !data.prices || !data.prices.length) return;
-            var first = data.prices[0];
-            var last  = data.prices[data.prices.length - 1];
-            var up    = last >= first;
-            var color = up ? '#66bb6a' : '#ef5350';
-            var ctx   = document.getElementById('boe-chart').getContext('2d');
-            if (_boeChart) _boeChart.destroy();
-            _boeChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: data.labels,
-                    datasets: [{
-                        data: data.prices,
-                        borderColor: color,
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        fill: true,
-                        backgroundColor: function(ctx) {
-                            var g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
-                            g.addColorStop(0, up ? 'rgba(102,187,106,0.18)' : 'rgba(239,83,80,0.18)');
-                            g.addColorStop(1, 'rgba(0,0,0,0)');
-                            return g;
-                        },
-                        tension: 0.3,
-                        _einheit: ' €'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: { duration: 300 },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { callbacks: { label: function(c) { return c.parsed.y.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €'; } } }
-                    },
-                    scales: {
-                        x: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, maxTicksLimit: 8 },
-                             grid: { color: 'rgba(255,255,255,0.06)' } },
-                        y: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } },
-                             grid: { color: 'rgba(255,255,255,0.06)' } }
+        /* ── SmartHome-Panel Toggle (Szenen ↔ Kalender) ── */
+        function showSmPanel(which) {
+            var szEl = document.getElementById('sp-szenen-content');
+            var kalEl = document.getElementById('sp-kal-content');
+            var btnS = document.getElementById('spt-btn-szenen');
+            var btnK = document.getElementById('spt-btn-kalender');
+            if (which === 'kalender') {
+                szEl.style.display = 'none';
+                kalEl.style.display = 'flex';
+                btnS.classList.remove('active');
+                btnK.classList.add('active');
+                renderSmKalender('sp-kal-list');
+            } else {
+                szEl.style.display = '';
+                kalEl.style.display = 'none';
+                btnS.classList.add('active');
+                btnK.classList.remove('active');
+            }
+        }
+
+        function showSmPanelMob(which) {
+            var szEl = document.getElementById('sp-mob-szenen-content');
+            var kalEl = document.getElementById('sp-mob-kal-content');
+            var btnS = document.getElementById('spt-mob-szenen');
+            var btnK = document.getElementById('spt-mob-kalender');
+            if (which === 'kalender') {
+                szEl.style.display = 'none';
+                kalEl.style.display = 'flex';
+                btnS.classList.remove('active');
+                btnK.classList.add('active');
+                renderSmKalender('sp-mob-kal-list');
+            } else {
+                szEl.style.display = '';
+                kalEl.style.display = 'none';
+                btnS.classList.add('active');
+                btnK.classList.remove('active');
+            }
+        }
+
+        function _escHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        function renderSmKalender(listId) {
+            var list = document.getElementById(listId);
+            if (!list) return;
+
+            function _doRender(events) {
+                // ensure _kalEvents is populated for modal
+                if (_kalEvents.length === 0 && events.length > 0) _kalEvents = events.slice();
+
+                var todayStr = new Date().toISOString().split('T')[0];
+                var agendaMap = {};
+                events.filter(function(ev) { return ev.start >= todayStr; }).forEach(function(ev) {
+                    if (ev.allDay && ev.end > ev.start) {
+                        var cur = new Date(ev.start + 'T12:00:00');
+                        for (var i = 0; i < 60; i++) {
+                            var ds = cur.toISOString().split('T')[0];
+                            if (ds >= ev.end) break;
+                            if (!agendaMap[ds]) agendaMap[ds] = [];
+                            var isFirst = ds === ev.start;
+                            var lastDs = new Date(new Date(ev.end+'T12:00:00').getTime()-86400000).toISOString().split('T')[0];
+                            agendaMap[ds].push({ev:ev, isFirst:isFirst, isLast:ds===lastDs});
+                            cur.setDate(cur.getDate()+1);
+                        }
+                    } else {
+                        if (!agendaMap[ev.start]) agendaMap[ev.start] = [];
+                        agendaMap[ev.start].push({ev:ev, isFirst:true, isLast:true});
                     }
+                });
+                var days = Object.keys(agendaMap).sort().slice(0,14);
+                if (days.length === 0) {
+                    list.innerHTML = '<p class="sp-kal-empty">Keine Termine</p>';
+                    return;
                 }
-            });
-        }
-
-        function ladeBoerse() {
-            if (_boeTimer === null) {
-                _boeTimer = setInterval(ladeBoerseOverview, 600000);
-            }
-            ladeBoerseOverview();
-            ladeBoerseChart(_boePeriod);
-        }
-
-        function ladeBoerseOverview() {
-            if (_boeCache.overview !== null) {
-                _renderBoerseOverview(_boeCache.overview);
-            }
-            fetch('/api/boerse/overview')
-                .then(r => r.json())
-                .then(function(data) {
-                    if (data.error) return;
-                    _boeCache.overview = data;
-                    _renderBoerseOverview(data);
-                })
-                .catch(function() {
-                    if (_boeCache.overview === null) {
-                        document.getElementById('boe-overview').innerHTML =
-                            '<span style="opacity:.5;font-size:13px">Keine Daten</span>';
-                    }
+                var dayNames = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+                var html = '';
+                days.forEach(function(ds) {
+                    var d = new Date(ds + 'T12:00:00');
+                    var label = ds === todayStr
+                        ? 'Heute'
+                        : (dayNames[d.getDay()] + ', ' + d.getDate() + '.' + (d.getMonth()+1) + '.');
+                    html += '<div class="sp-kal-day">' + label + '</div>';
+                    agendaMap[ds].forEach(function(entry) {
+                        var ev = entry.ev;
+                        var timeStr = ev.allDay ? 'Ganztägig' : (ev.startTime || '');
+                        if (ev.allDay && !entry.isFirst) timeStr = 'läuft…';
+                        else if (ev.allDay && !entry.isLast) timeStr = 'Beginn';
+                        var evIdx = _kalEvents.indexOf(ev);
+                        var clickAttr = evIdx >= 0 ? 'onclick="zeigeKalEvent(' + evIdx + ')"' : '';
+                        html += '<div class="sp-kal-ev" ' + clickAttr + '>'
+                            + '<div class="sp-kal-dot" style="background:' + (ev.color||'#546e7a') + '"></div>'
+                            + '<div class="sp-kal-info">'
+                            + '<div class="sp-kal-title">' + _escHtml(ev.title) + '</div>'
+                            + '<div class="sp-kal-time">' + _escHtml(timeStr) + '</div>'
+                            + '</div></div>';
+                    });
                 });
-        }
-
-        function ladeBoerseChart(period) {
-            _boePeriod = period;
-            document.querySelectorAll('.boe-period-btn').forEach(function(b) {
-                b.classList.toggle('active', b.dataset.period === period);
-            });
-            if (_boeCache.charts[period]) {
-                _renderBoerseChart(_boeCache.charts[period]);
+                list.innerHTML = html;
             }
-            fetch('/api/boerse/chart?period=' + period)
-                .then(r => r.json())
-                .then(function(data) {
-                    if (data.error || !data.prices || !data.prices.length) return;
-                    _boeCache.charts[period] = data;
-                    _renderBoerseChart(data);
-                });
+
+            if (_kalCache !== null) {
+                _doRender(_kalCache);
+            } else {
+                list.innerHTML = '<p class="sp-kal-empty">Lade…</p>';
+                fetch('/api/kalender')
+                    .then(function(r){ return r.json(); })
+                    .then(function(events){
+                        _kalCache = events;
+                        _kalEvents = events.slice();
+                        _doRender(events);
+                    })
+                    .catch(function(){
+                        list.innerHTML = '<p class="sp-kal-empty">Fehler beim Laden</p>';
+                    });
+            }
         }
 
         function setConfig(key, value) {
@@ -966,11 +978,6 @@
             <span class="nav-label">Wetter</span>
         </div>
 
-        <div class="nav-item" onclick="openTab(event, 'boerse'); ladeBoerse();">
-            <span class="nav-icon">📈</span>
-            <span class="nav-label">Börse</span>
-        </div>
-
         <div class="nav-item" onclick="openTab(event, 'einstellungen'); ladeConfig();">
             <span class="nav-icon">⚙</span>
             <span class="nav-label">Einstellungen</span>
@@ -982,7 +989,18 @@
 
     <!-- Smart Home -->
     <div id="smarthome" class="tabcontent">
-        <img src="/static/images/LayoutOG.png" id="floor" alt="Grundriss"/>
+        <img src="/static/images/LayoutOG.png" id="floor" alt="Grundriss OG"/>
+        <img src="/static/images/LayoutDG.png" id="floor-dg" alt="Grundriss DG"/>
+        <div id="ff-alles-bar">
+            <button class="ff-alles-btn" onclick="szene('fensterfront-hoch', this)">↑ Hoch</button>
+            <button class="ff-alles-btn" onclick="szene('fensterfront-halb-zu', this)">↕ Halb</button>
+            <button class="ff-alles-btn" onclick="szene('fensterfront-zu', this)">↓ Zu</button>
+        </div>
+        <div id="floor-switcher">
+            <button class="floor-btn active" data-floor="OG" onclick="setFloor('OG')">OG</button>
+            <button class="floor-btn" data-floor="DG" onclick="setFloor('DG')">DG</button>
+            <button class="floor-btn" data-floor="alles" onclick="setFloor('alles')">Alles</button>
+        </div>
         <div id="wrapper">
             <img src="/static/images/birne.png" data-typ="EsszimmerGross" data-val="true" class="cbutton licht DG OG" alt="EsszimmerGross" />
             <img src="/static/images/birne.png" data-typ="EsszimmerWand" data-val="true" class="cbutton licht DG OG" alt="EsszimmerWand" />
@@ -1011,6 +1029,19 @@
             <img src="/static/images/pfeilAb.png" data-typ="WohnzimmerZu" data-val="zu" class="cbutton jal OG" alt="Wohnzimmer" />
             <img src="/static/images/birne.png" data-typ="WohnzimmerVorne" data-val="true" class="cbutton licht OG" alt="WohnzimmerVorne" />
             <img src="/static/images/birne.png" data-typ="WohnzimmerWand" data-val="true" class="cbutton licht OG" alt="WohnzimmerWand" />
+            <img src="/static/images/pfeilAuf.png" data-typ="FFobenAuf" data-val="auf" class="cbutton jal DG OG" alt="FFobenAuf" />
+            <img src="/static/images/pfeilAb.png" data-typ="FFobenZu" data-val="zu" class="cbutton jal DG OG" alt="FFobenZu" />
+            <img src="/static/images/pfeilAuf.png" data-typ="FFlinksAuf" data-val="auf" class="cbutton jal DG OG" alt="FFlinks" />
+            <img src="/static/images/pfeilAb.png" data-typ="FFlinksZu" data-val="zu" class="cbutton jal DG OG" alt="FFlinks" />
+            <img src="/static/images/pfeilAuf.png" data-typ="FFrechtsAuf" data-val="auf" class="cbutton jal DG OG" alt="FFrechts" />
+            <img src="/static/images/pfeilAb.png" data-typ="FFrechtsZu" data-val="zu" class="cbutton jal DG OG" alt="FFrechts" />
+            <img src="/static/images/pfeilAuf.png" data-typ="FFmitteAuf" data-val="auf" class="cbutton jal DG OG" alt="FFmitte" />
+            <img src="/static/images/pfeilAb.png" data-typ="FFmitteZu" data-val="zu" class="cbutton jal DG OG" alt="FFmitte" />
+            <button id="stairs" onclick="toggleFloor()"></button>
+        </div>
+
+        <!-- DG-Buttons (separater Wrapper für Alles-Modus über #floor-dg) -->
+        <div id="wrapper-dg">
             <img src="/static/images/birne.png" data-typ="Ankleide" data-val="true" class="cbutton licht DG" alt="Ankleide" />
             <img src="/static/images/birne.png" data-typ="Schlafzimmer" data-val="true" class="cbutton licht DG" alt="Schlafzimmer" />
             <img src="/static/images/pfeilAuf.png" data-typ="SchlafzimmerAuf" data-val="auf" class="cbutton jal DG" alt="Schlafzimmer" />
@@ -1024,20 +1055,91 @@
             <img src="/static/images/birne.png" data-typ="HobbyraumNiesche" data-val="true" class="cbutton licht DG" alt="HobbyraumNiesche" />
             <img src="/static/images/birne.png" data-typ="FlurOben" data-val="true" class="cbutton licht DG" alt="FlurOben" />
             <img src="/static/images/birne.png" data-typ="Galerie" data-val="true" class="cbutton licht DG" alt="Galerie" />
-            <img src="/static/images/pfeilAuf.png" data-typ="FFobenAuf" data-val="auf" class="cbutton jal DG OG" alt="FFobenAuf" />
-            <img src="/static/images/pfeilAb.png" data-typ="FFobenZu" data-val="zu" class="cbutton jal DG OG" alt="FFobenZu" />
-            <img src="/static/images/pfeilAuf.png" data-typ="FFlinksAuf" data-val="auf" class="cbutton jal DG OG" alt="FFlinks" />
-            <img src="/static/images/pfeilAb.png" data-typ="FFlinksZu" data-val="zu" class="cbutton jal DG OG" alt="FFlinks" />
-            <img src="/static/images/pfeilAuf.png" data-typ="FFrechtsAuf" data-val="auf" class="cbutton jal DG OG" alt="FFrechts" />
-            <img src="/static/images/pfeilAb.png" data-typ="FFrechtsZu" data-val="zu" class="cbutton jal DG OG" alt="FFrechts" />
-            <img src="/static/images/pfeilAuf.png" data-typ="FFmitteAuf" data-val="auf" class="cbutton jal DG OG" alt="FFmitte" />
-            <img src="/static/images/pfeilAb.png" data-typ="FFmitteZu" data-val="zu" class="cbutton jal DG OG" alt="FFmitte" />
-            <button id="stairs" onclick="changeFloor()" />
         </div>
+
+        <!-- Mobile: Szenen-FAB + Bottom-Sheet (nur sichtbar wenn SmartHome-Tab aktiv) -->
+        <button id="szenen-fab" onclick="toggleSzenenSheet()">⚡ Szenen</button>
+
+        <div id="szenen-backdrop" onclick="toggleSzenenSheet()"></div>
+
+        <div id="szenen-sheet">
+            <div class="szenen-sheet-hdr">
+                <span>⚡ Szenen</span>
+                <button onclick="toggleSzenenSheet()">✕</button>
+            </div>
+            <div id="sp-mob-szenen-content">
+
+            <div class="scene-cat-label">Fensterfront</div>
+            <div class="scene-tiles">
+                <button class="scene-tile scene-tile--up" onclick="szene('fensterfront-hoch', this)">
+                    <span class="scene-tile-icon">↑</span>
+                    <span class="scene-tile-label">Hoch</span>
+                </button>
+                <button class="scene-tile scene-tile--half" onclick="szene('fensterfront-halb-zu', this)">
+                    <span class="scene-tile-icon">↕</span>
+                    <span class="scene-tile-label">Halb</span>
+                </button>
+                <button class="scene-tile scene-tile--down" onclick="szene('fensterfront-zu', this)">
+                    <span class="scene-tile-icon">↓</span>
+                    <span class="scene-tile-label">Zu</span>
+                </button>
+            </div>
+
+            <div class="scene-cat-label">Obergeschoss</div>
+            <div class="scene-tiles">
+                <button class="scene-tile scene-tile--up" onclick="szene('og-jalousie-hoch', this)">
+                    <span class="scene-tile-icon">↑</span>
+                    <span class="scene-tile-label">Hoch</span>
+                </button>
+                <button class="scene-tile scene-tile--down" onclick="szene('og-jalousie-runter', this)">
+                    <span class="scene-tile-icon">↓</span>
+                    <span class="scene-tile-label">Runter</span>
+                </button>
+                <button class="scene-tile scene-tile--off" onclick="szene('og-alles-aus', this)">
+                    <span class="scene-tile-icon">✕</span>
+                    <span class="scene-tile-label">Licht aus</span>
+                </button>
+            </div>
+
+            <div class="scene-cat-label">Dachgeschoss</div>
+            <div class="scene-tiles">
+                <button class="scene-tile scene-tile--up" onclick="szene('dg-jalousie-hoch', this)">
+                    <span class="scene-tile-icon">↑</span>
+                    <span class="scene-tile-label">Hoch</span>
+                </button>
+                <button class="scene-tile scene-tile--down" onclick="szene('dg-jalousie-runter', this)">
+                    <span class="scene-tile-icon">↓</span>
+                    <span class="scene-tile-label">Runter</span>
+                </button>
+                <button class="scene-tile scene-tile--off" onclick="szene('dg-alles-aus', this)">
+                    <span class="scene-tile-icon">✕</span>
+                    <span class="scene-tile-label">Licht aus</span>
+                </button>
+            </div>
+
+            <div class="scene-cat-label">Alles</div>
+            <div class="scene-tiles">
+                <button class="scene-tile scene-tile--up" onclick="szene('alles-jalousie-hoch', this)">
+                    <span class="scene-tile-icon">↑</span>
+                    <span class="scene-tile-label">Hoch</span>
+                </button>
+                <button class="scene-tile scene-tile--down" onclick="szene('alles-jalousie-runter', this)">
+                    <span class="scene-tile-icon">↓</span>
+                    <span class="scene-tile-label">Runter</span>
+                </button>
+                <button class="scene-tile scene-tile--off" onclick="szene('alles-aus', this)">
+                    <span class="scene-tile-icon">✕</span>
+                    <span class="scene-tile-label">Licht aus</span>
+                </button>
+            </div>
+            </div><!-- /sp-mob-szenen-content -->
+        </div>
+
     </div>
 
     <!-- Szenen-Panel (nur Desktop, nur bei SmartHome-Tab sichtbar) -->
     <div id="scene-panel">
+        <div id="sp-szenen-content">
 
         <div class="scene-cat-label">Fensterfront</div>
         <div class="scene-tiles">
@@ -1103,6 +1205,7 @@
             </button>
         </div>
 
+        </div><!-- /sp-szenen-content -->
     </div>
 
     <!-- Kalender -->
@@ -1253,16 +1356,20 @@
             <!-- Tages-Kennzahlen -->
             <div class="ef-stats">
                 <div class="ef-stat">
+                    <div class="ef-stat-val ef-stat--pv" id="ef-pv-kwh">–</div>
+                    <div class="ef-stat-label">Ertrag heute</div>
+                </div>
+                <div class="ef-stat">
                     <div class="ef-stat-val" id="ef-autarky">–</div>
                     <div class="ef-stat-label">Autarkie</div>
                 </div>
                 <div class="ef-stat">
                     <div class="ef-stat-val" id="ef-supply-kwh">–</div>
-                    <div class="ef-stat-label">Einspeisung heute</div>
+                    <div class="ef-stat-label">Einspeisung</div>
                 </div>
                 <div class="ef-stat">
                     <div class="ef-stat-val" id="ef-consume-kwh">–</div>
-                    <div class="ef-stat-label">Bezug heute</div>
+                    <div class="ef-stat-label">Bezug</div>
                 </div>
             </div>
         </div><!-- ef-wrap -->
@@ -1335,30 +1442,6 @@
                     frameborder="0">
                 </iframe>
             </div>
-        </div>
-
-    </div>
-
-    <!-- Börse -->
-    <div id="boerse" class="tabcontent">
-
-        <div class="w-section-title">Marktüberblick</div>
-        <div id="boe-overview" class="boe-overview">
-            <span style="opacity:.4;font-size:13px">Wird geladen…</span>
-        </div>
-
-        <div class="w-section-title" style="margin-top:24px;">
-            Vanguard All World
-            <span style="opacity:.45;font-size:12px;font-weight:normal;margin-left:6px;">A2PKXG · VWCE.DE</span>
-        </div>
-        <div class="boe-period-row">
-            <button class="boe-period-btn" data-period="1m"  onclick="ladeBoerseChart('1m')">1M</button>
-            <button class="boe-period-btn" data-period="3m"  onclick="ladeBoerseChart('3m')">3M</button>
-            <button class="boe-period-btn active" data-period="1j" onclick="ladeBoerseChart('1j')">1J</button>
-            <button class="boe-period-btn" data-period="5j"  onclick="ladeBoerseChart('5j')">5J</button>
-        </div>
-        <div class="w-chart-wrap" style="margin-top:8px;">
-            <canvas id="boe-chart"></canvas>
         </div>
 
     </div>

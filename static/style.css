@@ -171,6 +171,102 @@ html, body {
     position: absolute;
 }
 
+#wrapper-dg {
+    position: absolute;
+    display: none;
+}
+
+#floor-dg {
+    position: absolute;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: none;
+}
+
+/* ---- Stockwerk-Umschalter ---- */
+#floor-switcher {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+    display: flex;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: 8px;
+    padding: 3px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.floor-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    user-select: none;
+    -webkit-user-select: none;
+    letter-spacing: 0.04em;
+}
+
+.floor-btn:hover {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.floor-btn.active {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+}
+
+/* ---- Alles-Modus: Scene-Panel wegklappen, Grundrissbereich voll nutzen ---- */
+@media (min-width: 700px) {
+    #smarthome.mode-alles {
+        right: 0 !important;
+    }
+}
+
+/* ---- FF-Schnellleiste (nur im Alles-Modus) ---- */
+#ff-alles-bar {
+    display: none;
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    flex-direction: row;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 14px;
+    padding: 8px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+}
+#smarthome.mode-alles #ff-alles-bar {
+    display: flex;
+}
+.ff-alles-btn {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.88);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 0.86em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.18s, transform 0.12s;
+    white-space: nowrap;
+}
+.ff-alles-btn:hover  { background: rgba(255, 255, 255, 0.15); }
+.ff-alles-btn:active { transform: scale(0.93); }
+
 /* ============================================================
    KALENDER TAB
    ============================================================ */
@@ -665,9 +761,7 @@ input:checked + .toggle-track::before {
         width: 200px;
         background: rgba(10, 10, 10, 0.97);
         border-left: 1px solid rgba(255, 255, 255, 0.08);
-        overflow-y: auto;
-        padding: 20px 12px;
-        gap: 20px;
+        overflow: hidden;
         z-index: 50;
     }
 }
@@ -677,16 +771,16 @@ input:checked + .toggle-track::before {
     letter-spacing: 0.10em;
     text-transform: uppercase;
     opacity: 0.35;
-    padding: 2px 2px 7px;
+    padding: 2px 2px 4px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    margin-bottom: 7px;
+    margin-bottom: 0;
 }
 
 .scene-tiles {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 5px;
-    margin-bottom: 16px;
+    margin-bottom: 0;
 }
 
 .scene-tile {
@@ -694,15 +788,15 @@ input:checked + .toggle-track::before {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 10px 4px 9px;
+    gap: 5px;
+    padding: 8px 4px 7px;
     border-radius: 13px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.04);
     color: #ffffff;
     cursor: pointer;
     transition: background 0.18s, border-color 0.18s, transform 0.12s;
-    min-height: 62px;
+    min-height: 54px;
 }
 
 .scene-tile:hover {
@@ -1477,6 +1571,8 @@ input:checked + .toggle-track::before {
     margin-top: 3px;
 }
 
+.ef-stat--pv { color: #FFD54F; }
+
 /* Größere Knoten auf breiteren Screens */
 @media (min-width: 380px) {
     .ef-node-bg { width: 76px; height: 76px; }
@@ -1484,73 +1580,261 @@ input:checked + .toggle-track::before {
 }
 
 /* ============================================================
-   BÖRSE
+   MOBILE OPTIMIERUNGEN  (≤ 699 px)
    ============================================================ */
-.boe-overview {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
-    margin-top: 12px;
-}
 
+/* ---- Wetter: Spalten vertikal stapeln ---- */
 @media (max-width: 699px) {
-    .boe-overview { grid-template-columns: repeat(3, 1fr); }
+    #wetter { overflow-y: auto !important; }
+
+    .w-top-row {
+        flex-direction: column;
+        padding: 14px 16px 8px;
+        gap: 0;
+    }
+    .w-current-col {
+        border-right: none;
+        padding-right: 0;
+        min-width: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        padding-bottom: 14px;
+    }
+    .w-big-temp { font-size: 3.2em; }
+    .w-chart-col {
+        padding-left: 0;
+        padding-top: 12px;
+    }
+    .w-chart-col .w-chart-wrap {
+        flex: none;
+        height: 140px;
+    }
+    .w-hourly-section {
+        flex: none;
+        height: 148px;
+    }
 }
 
-.boe-card {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    border-radius: 12px;
-    padding: 14px 12px;
+/* ---- Kalender: Nur Agenda, kein 14-Tage-Grid ---- */
+@media (max-width: 699px) {
+    #kal-grid-wrap   { display: none !important; }
+    #kalender        { flex-direction: column; }
+    #kalender-agenda {
+        flex: 1;
+        width: 100%;
+        min-width: 0;
+        padding: 12px 14px;
+    }
+    .kal-date-header { font-size: 0.76rem; }
+    .kal-title       { font-size: 0.97rem; }
+    .kal-meta        { font-size: 0.80rem; }
+}
+
+/* ---- Börse: 2 Spalten statt 3 ---- */
+@media (max-width: 699px) {
+    .boe-overview { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---- Szenen-FAB (nur Smartphone) ---- */
+#szenen-fab {
+    display: none;
+}
+@media (max-width: 699px) {
+    #szenen-fab {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        position: fixed;
+        right: 14px;
+        bottom: 74px;
+        z-index: 90;
+        background: rgba(28, 28, 46, 0.97);
+        border: 1px solid rgba(255,255,255,0.22);
+        border-radius: 28px;
+        color: #ffffff;
+        font-size: 0.88em;
+        font-weight: 500;
+        padding: 11px 20px;
+        cursor: pointer;
+        box-shadow: 0 4px 22px rgba(0,0,0,0.60);
+        backdrop-filter: blur(10px);
+        transition: background 0.2s, transform 0.15s;
+    }
+    #szenen-fab:active { transform: scale(0.93); }
+}
+
+/* ---- Szenen Backdrop ---- */
+#szenen-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 85;
+}
+#szenen-backdrop.open { display: block; }
+
+/* ---- Szenen Bottom-Sheet ---- */
+@media (min-width: 700px) {
+    #szenen-sheet { display: none !important; }
+}
+#szenen-sheet {
+    display: block;
+    position: fixed;
+    bottom: 0;
+    left: 0; right: 0;
+    z-index: 90;
+    background: rgba(13, 13, 23, 0.98);
+    border-top: 1px solid rgba(255,255,255,0.13);
+    border-radius: 20px 20px 0 0;
+    padding: 0 16px calc(24px + 62px);
+    max-height: 72vh;
+    overflow-y: auto;
+    transform: translateY(110%);
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    backdrop-filter: blur(18px);
+}
+#szenen-sheet.open { transform: translateY(0); }
+
+.szenen-sheet-hdr {
     display: flex;
-    flex-direction: column;
-    gap: 5px;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 14px;
+    position: sticky;
+    top: 0;
+    background: rgba(13,13,23,0.98);
+    z-index: 1;
 }
-
-.boe-card-name {
-    font-size: 0.72em;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    opacity: 0.45;
+.szenen-sheet-hdr > span {
+    font-size: 0.97em;
+    font-weight: 600;
+    letter-spacing: 0.04em;
 }
+.szenen-sheet-hdr > button {
+    background: rgba(255,255,255,0.09);
+    border: none;
+    color: rgba(255,255,255,0.65);
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 0.9em;
+    display: flex; align-items: center; justify-content: center;
+}
+#szenen-sheet .scene-tile {
+    padding: 14px 4px 12px;
+    min-height: 72px;
+}
+#szenen-sheet .scene-tile-icon {
+    width: 36px; height: 36px;
+    font-size: 1.3em;
+}
+#szenen-sheet .scene-tile-label { font-size: 0.70em; }
+#szenen-sheet .scene-cat-label  { font-size: 0.70em; }
 
-.boe-card-price {
-    font-size: 1.05em;
+/* ============================================================
+   SMARTHOME-PANEL TOGGLE (Szenen ↔ Kalender)
+   ============================================================ */
+
+.spt-bar {
+    display: flex;
+    gap: 4px;
+    padding: 10px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+}
+.spt-bar--mob {
+    border-bottom: none;
+    padding: 0;
+    flex: 1;
+    margin-right: 8px;
+}
+.spt-btn {
+    flex: 1;
+    padding: 6px 4px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.50);
+    font-size: 0.76em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.spt-btn.active {
+    background: rgba(255,255,255,0.14);
+    color: #fff;
     font-weight: 600;
 }
-
-.boe-card-chg {
-    font-size: 0.82em;
-    font-weight: 500;
+.spt-btn:hover:not(.active) {
+    background: rgba(255,255,255,0.09);
+    color: rgba(255,255,255,0.80);
 }
 
-.boe-pos { color: #66bb6a; }
-.boe-neg { color: #ef5350; }
-
-.boe-period-row {
+#sp-szenen-content {
     display: flex;
-    gap: 6px;
-    margin-top: 10px;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 12px;
+    gap: 8px;
+}
+#sp-mob-szenen-content {
+    overflow-y: auto;
+    flex: 1;
+}
+#sp-kal-content,
+#sp-mob-kal-content {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
 }
 
-.boe-period-btn {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 7px;
-    color: rgba(255, 255, 255, 0.55);
-    font-size: 0.78em;
-    padding: 5px 14px;
+/* Compact calendar list */
+.sp-kal-day {
+    padding: 6px 12px 3px;
+    font-size: 0.70em;
+    font-weight: 700;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 6px;
+}
+.sp-kal-ev {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 10px;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s;
+    border-radius: 6px;
+    margin: 1px 4px;
+    transition: background 0.12s;
 }
-
-.boe-period-btn:hover {
-    background: rgba(255, 255, 255, 0.11);
-    color: #fff;
+.sp-kal-ev:hover { background: rgba(255,255,255,0.06); }
+.sp-kal-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 5px;
 }
-
-.boe-period-btn.active {
-    background: rgba(255, 255, 255, 0.14);
-    border-color: rgba(255, 255, 255, 0.25);
-    color: #fff;
+.sp-kal-info { flex: 1; min-width: 0; }
+.sp-kal-title {
+    font-size: 0.80em;
+    color: rgba(255,255,255,0.88);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sp-kal-time {
+    font-size: 0.70em;
+    color: rgba(255,255,255,0.38);
+    margin-top: 1px;
+}
+.sp-kal-empty {
+    padding: 20px 12px;
+    font-size: 0.80em;
+    color: rgba(255,255,255,0.28);
+    text-align: center;
 }
