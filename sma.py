@@ -27,8 +27,8 @@ _MCAST_GRP  = '239.12.255.254'
 _MCAST_PORT = 9522
 _STALE_GRID   = 15   # seconds before grid data is considered stale
 _STALE_INV    = 360  # seconds before inverter/battery data is stale
-_PORTAL_POLL    = 300    # seconds between Sunny Portal polls (5 min)
-_PORTAL_RELOGIN = 43200  # seconds between forced re-logins (12 h)
+_PORTAL_POLL    = 300   # seconds between Sunny Portal polls (5 min)
+_PORTAL_RELOGIN = 7200  # seconds between forced re-logins (2 h – Keycloak-Token läuft ab)
 
 # SMA Modbus unit IDs and register addresses
 # NOTE: Verify these against your device's Modbus fieldlist PDF.
@@ -359,6 +359,13 @@ class SMAManager:
         bat_out = data.get('BatteryOut')
         bat_in  = data.get('BatteryIn')
         soc     = data.get('BatteryChargeStatus')
+
+        # Wenn SOC null ist, ist die Session abgelaufen (SOC ist immer verfügbar)
+        if soc is None and bat_out is None and bat_in is None:
+            print('[SMA Portal] Batterie-Daten fehlen – Session abgelaufen, erneuere beim nächsten Poll',
+                  file=sys.stderr)
+            self._portal_sess = None
+            return
         bat_w   = None
         if bat_out is not None and bat_in is not None:
             bat_w = round(float(bat_out) - float(bat_in), 1)
