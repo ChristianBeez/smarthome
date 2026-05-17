@@ -5,10 +5,30 @@
     <title>HomeConnect</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" type="text/css" href="../static/style.css">
-    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/static/jquery.min.js"></script>
+    <script src="/static/chart.umd.min.js"></script>
     <script src="../static/java.js"></script>
     <script src="../static/modbus.js"></script>
+    <style>
+        /* ── Dachfenster Status ───────────────────────────────────────── */
+        .fenster-panel { padding: 0 2px 8px; }
+        .fenster-item  { display:flex; align-items:center; gap:7px; padding:5px 4px;
+                         border-radius:6px; font-size:12px; margin-bottom:2px; }
+        .fenster-item.fenster-offen { background: rgba(239,83,80,0.13); }
+        .fenster-icon  { font-size:13px; flex-shrink:0; }
+        .fenster-name  { flex:1; color:rgba(255,255,255,0.75); overflow:hidden;
+                         text-overflow:ellipsis; white-space:nowrap; }
+        .fenster-state { color:rgba(255,255,255,0.4); font-size:11px; flex-shrink:0; }
+        .fenster-bat   { color:rgba(255,255,255,0.28); font-size:10px; flex-shrink:0; }
+        .fenster-rain-warn { background:rgba(33,150,243,0.18); border-radius:6px;
+                             padding:5px 8px; font-size:11px; color:#64b5f6;
+                             margin-bottom:6px; text-align:center; }
+        .fenster-none  { color:rgba(255,255,255,0.28); font-size:11px; padding:4px 2px; }
+        .config-text   { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15);
+                         border-radius:6px; color:#fff; padding:6px 10px; font-size:14px;
+                         width:200px; outline:none; }
+        .config-text:focus { border-color:rgba(255,255,255,0.35); }
+    </style>
     <script type=text/javascript>$SCRIPT_ROOT = {{ request.script_root | tojson }};</script>
     <script>
         /* ======================================================
@@ -471,13 +491,13 @@
                     /* Haus */
                     document.getElementById('ef-haus-w').textContent = houseW + ' W';
 
-                    /* Tagesbilanz */
-                    document.getElementById('ef-pv-kwh').textContent =
-                        d.today_pv_kwh      != null ? d.today_pv_kwh      + ' kWh' : '–';
-                    document.getElementById('ef-supply-kwh').textContent =
-                        d.today_supply_kwh  != null ? d.today_supply_kwh  + ' kWh' : '–';
-                    document.getElementById('ef-consume-kwh').textContent =
-                        d.today_consume_kwh != null ? d.today_consume_kwh + ' kWh' : '–';
+                    /* Tagesbilanz (2 Nachkommastellen, deutsches Komma) */
+                    function fmtKwh(v) {
+                        return v != null ? parseFloat(v).toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' kWh' : '–';
+                    }
+                    document.getElementById('ef-pv-kwh').textContent      = fmtKwh(d.today_pv_kwh);
+                    document.getElementById('ef-supply-kwh').textContent  = fmtKwh(d.today_supply_kwh);
+                    document.getElementById('ef-consume-kwh').textContent = fmtKwh(d.today_consume_kwh);
 
                     /* Autarkie (momentan) */
                     if (houseW > 0) {
@@ -566,7 +586,8 @@
                     document.getElementById('toggle-extremeHot').checked = cfg.extremeHot;
                     document.getElementById('toggle-christmas').checked = cfg.christmas;
                     document.getElementById('toggle-SchlafRollo').checked = cfg.SchlafRollo;
-                    document.getElementById('input-halbZuDelay').value = cfg.halbZuDelay != null ? cfg.halbZuDelay : 10;
+                    document.getElementById('input-halbZuProzent').value = cfg.halbZuProzent != null ? cfg.halbZuProzent : 50;
+                    document.getElementById('input-ntfyTopic').value = cfg.ntfyTopic || '';
                 });
         }
 
@@ -574,21 +595,28 @@
         function szene(name, btn) {
             if (btn) {
                 btn.disabled = true;
-                var orig = btn.textContent;
-                btn.textContent = '…';
+                btn.classList.add('szene-aktiv');
             }
             fetch('/api/szene/' + name)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!btn) return;
                     var ms = data.delay ? data.delay * 1000 + 500 : 600;
-                    setTimeout(function() { btn.disabled = false; btn.textContent = orig; }, ms);
+                    setTimeout(function() {
+                        btn.disabled = false;
+                        btn.classList.remove('szene-aktiv');
+                        btn.classList.add('szene-fertig');
+                        setTimeout(function() { btn.classList.remove('szene-fertig'); }, 2000);
+                    }, ms);
                 })
-                .catch(function() { if (btn) { btn.disabled = false; btn.textContent = orig; } });
+                .catch(function() {
+                    if (btn) { btn.disabled = false; btn.classList.remove('szene-aktiv'); }
+                });
         }
-        var _kalEvents = [];
-        var _kalCache  = null;
-        var _kalTimer  = null;
+        var _kalEvents  = [];
+        var _kalCache   = null;
+        var _kalTimer   = null;
+        var _kalMobView = 'liste';  /* 'liste' | '3tage' – aktive Mobilansicht */
 
         function zeigeKalEvent(idx) {
             const ev = _kalEvents[idx];
@@ -620,7 +648,7 @@
             const todayStr   = new Date().toISOString().split('T')[0];
             const tomorrow   = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-            const HOUR_H = 60;
+            const HOUR_H = 40;
             const now    = new Date();
             const days   = [];
             for (let i = 0; i < 14; i++) {
@@ -790,6 +818,79 @@
                 });
             });
             container.innerHTML = html;
+
+            /* Wenn 3-Tage-Modus aktiv: auch diese Ansicht aktualisieren */
+            if (_kalMobView === '3tage') _renderKal3day(events);
+        }
+
+        /* ── Kalender: Mobile-Ansicht umschalten ── */
+        function kalToggleView(which) {
+            _kalMobView = which;
+            var agenda = document.getElementById('kalender-agenda');
+            var day3   = document.getElementById('kal-3day');
+            var btnL   = document.getElementById('kal-btn-liste');
+            var btn3   = document.getElementById('kal-btn-3tage');
+            if (which === '3tage') {
+                if (agenda) agenda.style.display = 'none';
+                if (day3)   day3.classList.add('kal-3day--visible');
+                if (btnL)   btnL.classList.remove('active');
+                if (btn3)   btn3.classList.add('active');
+                if (_kalCache) _renderKal3day(_kalCache);
+            } else {
+                if (day3)   day3.classList.remove('kal-3day--visible');
+                if (agenda) agenda.style.display = '';
+                if (btn3)   btn3.classList.remove('active');
+                if (btnL)   btnL.classList.add('active');
+            }
+        }
+
+        /* ── Kalender: 3-Tage-Kompaktansicht rendern ── */
+        function _renderKal3day(events) {
+            var container = document.getElementById('kal-3day');
+            if (!container) return;
+            var wochentage = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+            var todayStr   = new Date().toISOString().split('T')[0];
+            var days = [];
+            for (var i = 0; i < 3; i++) {
+                var d = new Date();
+                d.setDate(d.getDate() + i);
+                days.push(d.toISOString().split('T')[0]);
+            }
+            var html = '';
+            days.forEach(function(ds) {
+                var d = new Date(ds + 'T12:00:00');
+                var isToday = ds === todayStr;
+                var dayEvents = events.filter(function(ev) {
+                    if (ev.allDay) return ev.start <= ds && ev.end > ds;
+                    return ev.start === ds;
+                });
+                dayEvents.sort(function(a, b) {
+                    if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+                    return (a.startTime || '').localeCompare(b.startTime || '');
+                });
+                html += '<div class="kal3-col">';
+                html += '<div class="kal3-col-hdr' + (isToday ? ' today' : '') + '">';
+                html += '<div class="kal3-dname">' + wochentage[d.getDay()] + '</div>';
+                html += '<div class="kal3-dnum">' + d.getDate() + '</div>';
+                html += '</div>';
+                html += '<div class="kal3-events">';
+                if (!dayEvents.length) {
+                    html += '<div class="kal3-empty">Frei</div>';
+                } else {
+                    dayEvents.forEach(function(ev) {
+                        /* Sicherstellen dass das Event in _kalEvents steht */
+                        var idx = _kalEvents.indexOf(ev);
+                        if (idx < 0) { idx = _kalEvents.push(ev) - 1; }
+                        var timeStr = ev.allDay ? 'Ganztag' : ev.startTime;
+                        html += '<div class="kal3-event" style="background:' + (ev.color || '#546e7a') + '" onclick="zeigeKalEvent(' + idx + ')">';
+                        html += '<div class="kal3-event-time">' + timeStr + '</div>';
+                        html += '<div class="kal3-event-title">' + ev.title + '</div>';
+                        html += '</div>';
+                    });
+                }
+                html += '</div></div>';
+            });
+            container.innerHTML = html;
         }
 
         function ladeKalender() {
@@ -950,6 +1051,75 @@
                 }
             });
         }
+
+        /* ======================================================
+           DACHFENSTER
+           ====================================================== */
+        function ladeFenster() {
+            fetch('/api/fenster')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var panel = document.getElementById('fenster-panel');
+                    if (!panel) return;
+                    var wins = data.windows || {};
+                    var keys = Object.keys(wins);
+                    if (keys.length === 0) {
+                        panel.innerHTML = '<div class="fenster-none">Keine Sensoren angelernt</div>';
+                        return;
+                    }
+                    var html = '';
+                    if (data.rain_warning) {
+                        html += '<div class="fenster-rain-warn">' +
+                            (data.rain_now ? '🌧 Regen!' : '🌦 Regen kommt!') + '</div>';
+                    }
+                    keys.forEach(function(name) {
+                        var w = wins[name];
+                        var offen = !w.contact;
+                        html += '<div class="fenster-item' + (offen ? ' fenster-offen' : '') + '">' +
+                            '<span class="fenster-icon">' + (offen ? '🔴' : '🟢') + '</span>' +
+                            '<span class="fenster-name">' + name + '</span>' +
+                            '<span class="fenster-state">' + (offen ? 'offen' : 'zu') + '</span>' +
+                            (w.battery != null ? '<span class="fenster-bat">🔋' + w.battery + '%</span>' : '') +
+                        '</div>';
+                    });
+                    panel.innerHTML = html;
+                })
+                .catch(function() {});
+        }
+
+        function testPush(btn) {
+            var status = document.getElementById('test-push-status');
+            btn.disabled = true;
+            btn.textContent = '…';
+            status.style.display = 'none';
+            fetch('/api/fenster/test', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    btn.disabled = false;
+                    btn.textContent = '📱 Test-Push';
+                    status.style.display = 'inline';
+                    if (d.ok) {
+                        status.style.color = '#66bb6a';
+                        status.textContent = '✓ Gesendet!';
+                    } else {
+                        status.style.color = '#ef5350';
+                        status.textContent = '✗ ' + (d.error || 'Fehler');
+                    }
+                    setTimeout(function() { status.style.display = 'none'; }, 4000);
+                })
+                .catch(function() {
+                    btn.disabled = false;
+                    btn.textContent = '📱 Test-Push';
+                    status.style.display = 'inline';
+                    status.style.color = '#ef5350';
+                    status.textContent = '✗ Verbindungsfehler';
+                    setTimeout(function() { status.style.display = 'none'; }, 4000);
+                });
+        }
+
+        // Automatisch alle 15 Sek. aktualisieren
+        setInterval(ladeFenster, 15000);
+        document.addEventListener('DOMContentLoaded', ladeFenster);
     </script>
 </head>
 
@@ -963,7 +1133,7 @@
             <span class="nav-label">Smart Home</span>
         </div>
 
-        <div class="nav-item" onclick="openTab(event, 'kalender'); document.getElementById('kalender').style.display='flex'; ladeKalender();">
+        <div class="nav-item" onclick="openTab(event, 'kalender'); ladeKalender();">
             <span class="nav-icon">★</span>
             <span class="nav-label">Kalender</span>
         </div>
@@ -973,7 +1143,7 @@
             <span class="nav-label">Solar</span>
         </div>
 
-        <div class="nav-item" onclick="openTab(event, 'wetter'); document.getElementById('wetter').style.display='flex'; ladeWetter();">
+        <div class="nav-item" onclick="openTab(event, 'wetter'); ladeWetter();">
             <span class="nav-icon">⛅</span>
             <span class="nav-label">Wetter</span>
         </div>
@@ -992,6 +1162,7 @@
         <img src="/static/images/LayoutOG.png" id="floor" alt="Grundriss OG"/>
         <img src="/static/images/LayoutDG.png" id="floor-dg" alt="Grundriss DG"/>
         <div id="ff-alles-bar">
+            <span class="ff-alles-label">Fensterfront</span>
             <button class="ff-alles-btn" onclick="szene('fensterfront-hoch', this)">↑ Hoch</button>
             <button class="ff-alles-btn" onclick="szene('fensterfront-halb-zu', this)">↕ Halb</button>
             <button class="ff-alles-btn" onclick="szene('fensterfront-zu', this)">↓ Zu</button>
@@ -1000,6 +1171,9 @@
             <button class="floor-btn active" data-floor="OG" onclick="setFloor('OG')">OG</button>
             <button class="floor-btn" data-floor="DG" onclick="setFloor('DG')">DG</button>
             <button class="floor-btn" data-floor="alles" onclick="setFloor('alles')">Alles</button>
+        </div>
+        <div id="etage-indikator">
+            <span id="etage-ind-text">DG 💡</span>
         </div>
         <div id="wrapper">
             <img src="/static/images/birne.png" data-typ="EsszimmerGross" data-val="true" class="cbutton licht DG OG" alt="EsszimmerGross" />
@@ -1055,84 +1229,6 @@
             <img src="/static/images/birne.png" data-typ="HobbyraumNiesche" data-val="true" class="cbutton licht DG" alt="HobbyraumNiesche" />
             <img src="/static/images/birne.png" data-typ="FlurOben" data-val="true" class="cbutton licht DG" alt="FlurOben" />
             <img src="/static/images/birne.png" data-typ="Galerie" data-val="true" class="cbutton licht DG" alt="Galerie" />
-        </div>
-
-        <!-- Mobile: Szenen-FAB + Bottom-Sheet (nur sichtbar wenn SmartHome-Tab aktiv) -->
-        <button id="szenen-fab" onclick="toggleSzenenSheet()">⚡ Szenen</button>
-
-        <div id="szenen-backdrop" onclick="toggleSzenenSheet()"></div>
-
-        <div id="szenen-sheet">
-            <div class="szenen-sheet-hdr">
-                <span>⚡ Szenen</span>
-                <button onclick="toggleSzenenSheet()">✕</button>
-            </div>
-            <div id="sp-mob-szenen-content">
-
-            <div class="scene-cat-label">Fensterfront</div>
-            <div class="scene-tiles">
-                <button class="scene-tile scene-tile--up" onclick="szene('fensterfront-hoch', this)">
-                    <span class="scene-tile-icon">↑</span>
-                    <span class="scene-tile-label">Hoch</span>
-                </button>
-                <button class="scene-tile scene-tile--half" onclick="szene('fensterfront-halb-zu', this)">
-                    <span class="scene-tile-icon">↕</span>
-                    <span class="scene-tile-label">Halb</span>
-                </button>
-                <button class="scene-tile scene-tile--down" onclick="szene('fensterfront-zu', this)">
-                    <span class="scene-tile-icon">↓</span>
-                    <span class="scene-tile-label">Zu</span>
-                </button>
-            </div>
-
-            <div class="scene-cat-label">Obergeschoss</div>
-            <div class="scene-tiles">
-                <button class="scene-tile scene-tile--up" onclick="szene('og-jalousie-hoch', this)">
-                    <span class="scene-tile-icon">↑</span>
-                    <span class="scene-tile-label">Hoch</span>
-                </button>
-                <button class="scene-tile scene-tile--down" onclick="szene('og-jalousie-runter', this)">
-                    <span class="scene-tile-icon">↓</span>
-                    <span class="scene-tile-label">Runter</span>
-                </button>
-                <button class="scene-tile scene-tile--off" onclick="szene('og-alles-aus', this)">
-                    <span class="scene-tile-icon">✕</span>
-                    <span class="scene-tile-label">Licht aus</span>
-                </button>
-            </div>
-
-            <div class="scene-cat-label">Dachgeschoss</div>
-            <div class="scene-tiles">
-                <button class="scene-tile scene-tile--up" onclick="szene('dg-jalousie-hoch', this)">
-                    <span class="scene-tile-icon">↑</span>
-                    <span class="scene-tile-label">Hoch</span>
-                </button>
-                <button class="scene-tile scene-tile--down" onclick="szene('dg-jalousie-runter', this)">
-                    <span class="scene-tile-icon">↓</span>
-                    <span class="scene-tile-label">Runter</span>
-                </button>
-                <button class="scene-tile scene-tile--off" onclick="szene('dg-alles-aus', this)">
-                    <span class="scene-tile-icon">✕</span>
-                    <span class="scene-tile-label">Licht aus</span>
-                </button>
-            </div>
-
-            <div class="scene-cat-label">Alles</div>
-            <div class="scene-tiles">
-                <button class="scene-tile scene-tile--up" onclick="szene('alles-jalousie-hoch', this)">
-                    <span class="scene-tile-icon">↑</span>
-                    <span class="scene-tile-label">Hoch</span>
-                </button>
-                <button class="scene-tile scene-tile--down" onclick="szene('alles-jalousie-runter', this)">
-                    <span class="scene-tile-icon">↓</span>
-                    <span class="scene-tile-label">Runter</span>
-                </button>
-                <button class="scene-tile scene-tile--off" onclick="szene('alles-aus', this)">
-                    <span class="scene-tile-icon">✕</span>
-                    <span class="scene-tile-label">Licht aus</span>
-                </button>
-            </div>
-            </div><!-- /sp-mob-szenen-content -->
         </div>
 
     </div>
@@ -1205,14 +1301,26 @@
             </button>
         </div>
 
+        <div class="scene-cat-label" style="margin-top:20px;">Dachfenster</div>
+        <div id="fenster-panel" class="fenster-panel">
+            <div class="fenster-none">Lade…</div>
+        </div>
+
         </div><!-- /sp-szenen-content -->
     </div>
 
     <!-- Kalender -->
     <div id="kalender" class="tabcontent">
+        <!-- Toggle-Leiste: nur auf Smartphones sichtbar (CSS blendet auf Desktop aus) -->
+        <div id="kal-mob-toggle">
+            <button id="kal-btn-liste" class="kal-mob-btn active" onclick="kalToggleView('liste')">☰ Liste</button>
+            <button id="kal-btn-3tage" class="kal-mob-btn" onclick="kalToggleView('3tage')">📅 3 Tage</button>
+        </div>
         <div id="kal-grid-wrap">
             <div id="kal-grid"></div>
         </div>
+        <!-- 3-Tage-Ansicht (nur mobil, per Toggle aktiv) -->
+        <div id="kal-3day"></div>
         <div id="kalender-agenda"><p class="kal-empty">Lade Termine…</p></div>
 
         <!-- Event-Steckbrief Modal -->
@@ -1489,16 +1597,118 @@
 
         <div class="config-item">
             <div>
-                <strong>⏱ Halb-zu Wartezeit</strong>
-                <p>Sekunden zwischen „Zu"- und „Hoch"-Signal beim <em>Halb zu</em>-Button der Fensterfront.
-                Je nach Rollo-Laufzeit anpassen.</p>
+                <strong>↕ Halb-zu Position</strong>
+                <p>Wie weit die Fensterfront beim „Halb zu"-Button schließt.
+                0 % = vollständig offen, 100 % = vollständig geschlossen.
+                Laufzeit Rollo = 56 s.</p>
             </div>
-            <input type="number" id="input-halbZuDelay" min="1" max="60" value="10"
-                   class="config-number"
-                   onchange="setConfig('halbZuDelay', parseInt(this.value))">
+            <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+                <input type="number" id="input-halbZuProzent" min="0" max="100" value="50"
+                       class="config-number"
+                       onchange="setConfig('halbZuProzent', parseInt(this.value))">
+                <span style="opacity:0.55;font-size:0.9em">%</span>
+            </div>
+        </div>
+
+        <div class="config-item">
+            <div>
+                <strong>📱 ntfy.sh Kanal (Dachfenster-Alert)</strong>
+                <p>Einen eindeutigen Kanalnamen wählen (z.B. <em>beez-dachfenster</em>). Ntfy-App auf dem Handy installieren → gleichen Kanal abonnieren → fertig. Kein Account nötig, kostenlos.</p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <input type="text" id="input-ntfyTopic" placeholder="z.B. beez-dachfenster"
+                       class="config-text"
+                       onchange="setConfig('ntfyTopic', this.value)">
+                <button id="btn-test-push" class="scene-tile" style="width:auto; padding:8px 16px;"
+                        onclick="testPush(this)">📱 Test-Push</button>
+                <span id="test-push-status" style="font-size:12px; display:none;"></span>
+            </div>
         </div>
 
         <p id="config-status">✓ Gespeichert</p>
+    </div>
+
+    <!-- ===================== MOBILE: SZENEN-FAB + SHEET ===================== -->
+    <!-- WICHTIG: Außerhalb aller overflow:hidden-Elemente damit position:fixed
+         auf iOS Safari korrekt relativ zum Viewport positioniert wird.
+         Sichtbarkeit wird per JS in openTab() gesteuert. -->
+
+    <button id="szenen-fab" onclick="toggleSzenenSheet()">⚡ Szenen</button>
+
+    <div id="szenen-backdrop" onclick="toggleSzenenSheet()"></div>
+
+    <div id="szenen-sheet">
+        <div class="szenen-sheet-hdr">
+            <span>⚡ Szenen</span>
+            <button onclick="toggleSzenenSheet()">✕</button>
+        </div>
+        <div id="sp-mob-szenen-content">
+
+        <div class="scene-cat-label">Fensterfront</div>
+        <div class="scene-tiles">
+            <button class="scene-tile scene-tile--up" onclick="szene('fensterfront-hoch', this)">
+                <span class="scene-tile-icon">↑</span>
+                <span class="scene-tile-label">Hoch</span>
+            </button>
+            <button class="scene-tile scene-tile--half" onclick="szene('fensterfront-halb-zu', this)">
+                <span class="scene-tile-icon">↕</span>
+                <span class="scene-tile-label">Halb</span>
+            </button>
+            <button class="scene-tile scene-tile--down" onclick="szene('fensterfront-zu', this)">
+                <span class="scene-tile-icon">↓</span>
+                <span class="scene-tile-label">Zu</span>
+            </button>
+        </div>
+
+        <div class="scene-cat-label">Obergeschoss</div>
+        <div class="scene-tiles">
+            <button class="scene-tile scene-tile--up" onclick="szene('og-jalousie-hoch', this)">
+                <span class="scene-tile-icon">↑</span>
+                <span class="scene-tile-label">Hoch</span>
+            </button>
+            <button class="scene-tile scene-tile--down" onclick="szene('og-jalousie-runter', this)">
+                <span class="scene-tile-icon">↓</span>
+                <span class="scene-tile-label">Runter</span>
+            </button>
+            <button class="scene-tile scene-tile--off" onclick="szene('og-alles-aus', this)">
+                <span class="scene-tile-icon">✕</span>
+                <span class="scene-tile-label">Licht aus</span>
+            </button>
+        </div>
+
+        <div class="scene-cat-label">Dachgeschoss</div>
+        <div class="scene-tiles">
+            <button class="scene-tile scene-tile--up" onclick="szene('dg-jalousie-hoch', this)">
+                <span class="scene-tile-icon">↑</span>
+                <span class="scene-tile-label">Hoch</span>
+            </button>
+            <button class="scene-tile scene-tile--down" onclick="szene('dg-jalousie-runter', this)">
+                <span class="scene-tile-icon">↓</span>
+                <span class="scene-tile-label">Runter</span>
+            </button>
+            <button class="scene-tile scene-tile--off" onclick="szene('dg-alles-aus', this)">
+                <span class="scene-tile-icon">✕</span>
+                <span class="scene-tile-label">Licht aus</span>
+            </button>
+        </div>
+
+        <div class="scene-cat-label">Alles</div>
+        <div class="scene-tiles">
+            <button class="scene-tile scene-tile--up" onclick="szene('alles-jalousie-hoch', this)">
+                <span class="scene-tile-icon">↑</span>
+                <span class="scene-tile-label">Hoch</span>
+            </button>
+            <button class="scene-tile scene-tile--down" onclick="szene('alles-jalousie-runter', this)">
+                <span class="scene-tile-icon">↓</span>
+                <span class="scene-tile-label">Runter</span>
+            </button>
+            <button class="scene-tile scene-tile--off" onclick="szene('alles-aus', this)">
+                <span class="scene-tile-icon">✕</span>
+                <span class="scene-tile-label">Licht aus</span>
+            </button>
+        </div>
+
+        </div><!-- /sp-mob-szenen-content -->
     </div>
 
 </body>
