@@ -1,0 +1,10 @@
+[Unit]
+Description=Hello Task – schreibt 'hallo' um 03:30 Uhr
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/Haussteuerung
+ExecStart=/usr/bin/python3 /home/pi/Haussteuerung/hello_task.py
+StandardOutput=journal
+StandardError=journal

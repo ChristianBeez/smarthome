@@ -89,6 +89,33 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
+# --- 5. hello_task.service ---
+cat > /etc/systemd/system/hello_task.service << EOF
+[Unit]
+Description=Hello Task – schreibt 'hallo' um 03:30 Uhr
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=$APP_DIR
+ExecStart=$PYTHON $APP_DIR/hello_task.py
+StandardOutput=journal
+StandardError=journal
+EOF
+
+# --- 6. hello_task.timer ---
+cat > /etc/systemd/system/hello_task.timer << EOF
+[Unit]
+Description=Täglich um 03:30 Uhr 'hallo' ausgeben
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
 echo "==> Lade systemd neu..."
 systemctl daemon-reload
 
@@ -97,6 +124,7 @@ systemctl enable daytime.service
 systemctl enable website.service
 systemctl enable smarthome.service
 systemctl enable ngrok.service
+systemctl enable hello_task.timer
 
 echo "==> Starte Services jetzt..."
 systemctl start daytime.service
@@ -104,15 +132,18 @@ systemctl start website.service
 systemctl start smarthome.service
 sleep 3   # kurz warten bis Flask-Apps laufen
 systemctl start ngrok.service
+systemctl start hello_task.timer
 
 echo ""
 echo "==> Fertig! Status-Überblick:"
 echo "------------------------------------------------------------"
-systemctl status daytime website smarthome ngrok --no-pager -l
+systemctl status daytime website smarthome ngrok hello_task.timer --no-pager -l
 echo ""
 echo "Nützliche Befehle:"
-echo "  sudo systemctl status daytime website smarthome ngrok"
+echo "  sudo systemctl status daytime website smarthome ngrok hello_task.timer"
 echo "  sudo journalctl -u website -f        (Live-Log Website)"
 echo "  sudo journalctl -u smarthome -f      (Live-Log SmartHome)"
 echo "  sudo journalctl -u daytime -f        (Live-Log Daytime)"
+echo "  sudo journalctl -u hello_task -f     (Live-Log Hello Task)"
 echo "  sudo systemctl restart smarthome     (Service neu starten)"
+echo "  systemctl list-timers hello_task.timer  (nächste Ausführung)"
